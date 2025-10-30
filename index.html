@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Emotion Playlist · Home</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body data-mood="calm">
+  <header class="topbar">
+    <div class="brand">🎵 Emotion Playlist</div>
+    <nav class="nav">
+      <a href="./search.html" class="btn">검색</a>
+      <a href="./playlist.html" class="btn">내 재생목록</a>
+      <a href="./login.html" class="btn" id="loginLink">로그인</a>
+      <span id="userBadge" class="badge hidden"></span>
+      <button id="logoutBtn" class="btn hidden">로그아웃</button>
+    </nav>
+  </header>
+
+  <main class="grid">
+    <!-- 왼쪽: 플레이어 -->
+    <section class="panel player">
+      <div class="iframe-wrap"><div id="player"></div></div>
+      <div class="controls">
+        <button id="playBtn" class="btn primary">재생</button>
+        <button id="pauseBtn" class="btn">일시정지</button>
+        <button id="addToPlaylistBtn" class="btn">재생목록에 추가</button>
+        <a id="openOnYT" class="btn" target="_blank" rel="noopener">YouTube에서 열기</a>
+      </div>
+      <div class="meta">
+        <img id="nowThumb" alt="썸네일" />
+        <div>
+          <div id="nowTitle" class="title">곡을 선택하세요</div>
+          <div id="nowSub" class="sub">아티스트 · 원본 제목</div>
+        </div>
+        <span id="nowSource" class="badge">–</span>
+      </div>
+      <div class="rate">
+        <span class="sub">이 곡의 감정 라벨:</span>
+        <div class="moods" id="rateMoods"></div>
+      </div>
+    </section>
+
+    <!-- 오른쪽: 추천 목록 -->
+    <aside class="panel">
+      <div class="rightHeader">
+        <h3 class="sub">추천</h3>
+        <div class="moods" id="moodChips"></div>
+      </div>
+      <div id="recList" class="list"></div>
+    </aside>
+  </main>
+
+  <footer class="foot">Demo: YouTube 임베드 + 더미 데이터. 추후 /api/search 연동 가능.</footer>
+
+  <!-- scripts -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="./assets/auth.js"></script>
+  <script src="./assets/api.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
