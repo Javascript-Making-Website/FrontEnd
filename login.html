@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Emotion Playlist · Playlist</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body data-mood="calm">
+  <header class="topbar">
+    <div class="brand">📻 내 재생목록</div>
+    <nav class="nav">
+      <a href="./index.html" class="btn">홈</a>
+      <a href="./search.html" class="btn">검색</a>
+      <a href="./login.html" class="btn" id="loginLink">로그인</a>
+      <span id="userBadge" class="badge hidden"></span>
+      <button id="logoutBtn" class="btn hidden">로그아웃</button>
+    </nav>
+  </header>
+
+  <main class="panel" style="max-width:980px;margin:12px auto;">
+    <div id="plList" class="list"></div>
+  </main>
+
+  <footer class="foot">로그인 사용자별로 재생목록(localStorage) 관리</footer>
+
+  <script src="./assets/auth.js"></script>
+  <script src="./assets/api.js"></script>
+  <script>
+    Auth.syncHeader();
+
+    const PL = API.Playlist;
+
+    function itemEl(track){
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML = `
+        <img src="${track.thumb}" alt="thumb" />
+        <div>
+          <div class="t">${API.cleanTitle(track.title)}</div>
+          <div class="s">${track.artist} · <span class="badge">${track.source}</span></div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-play">재생</button>
+          <button class="btn btn-remove">삭제</button>
+        </div>
+      `;
+
+      el.querySelector('.btn-play').onclick = () => {
+        localStorage.setItem('currentTrackId', track.id);
+        window.location.href = './index.html';
+      };
+
+      el.querySelector('.btn-remove').onclick = () => {
+        PL.remove(track.id);
+        render();
+      };
+
+      return el;
+    }
+
+    function render(){
+      const holder = document.getElementById('plList');
+      holder.innerHTML = '';
+      PL.get().forEach(t => holder.appendChild(itemEl(t)));
+    }
+
+    render();
+  </script>
+</body>
+</html>
