@@ -1,0 +1,67 @@
+/* 전체 스타일 */
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; transition: background-color 0.3s; background-color: #fefefe; }
+
+header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background-color: #fff; flex-wrap: wrap; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
+#emotionButtons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+#emotionButtons button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+  background-color: #f0f0f0;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+#emotionButtons button:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+#emotionButtons button.active { box-shadow: 0 0 0 3px #555 inset; }
+
+#searchSection { display: flex; gap: 10px; flex: 1; min-width: 250px; margin-bottom: 10px; }
+#searchInput {
+  flex: 1;
+  padding: 12px 15px;
+  border-radius: 12px;
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  font-size: 16px;
+}
+#searchBtn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 12px;
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s, transform 0.2s;
+}
+#searchBtn:hover { background-color: #45a049; transform: translateY(-2px); }
+
+/* 메인 영역 */
+main { padding: 20px; }
+
+h3 { margin-bottom: 10px; font-size: 20px; color: #333; border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+
+.results { display: flex; flex-direction: column; gap: 15px; max-height: 500px; overflow-y: auto; }
+
+/* 카드 스타일 */
+.song {
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.song:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+.song img { width: 140px; height: 90px; object-fit: cover; border-radius: 10px; margin-right: 15px; }
+.song a { text-decoration: none; color: #222; font-weight: bold; font-size: 16px; }
+
+@media (max-width: 600px){
+  #searchSection { flex-direction: column; }
+  #searchBtn { width: 100%; }
+  .song { flex-direction: column; align-items: flex-start; }
+  .song img { margin-bottom: 10px; }
+}

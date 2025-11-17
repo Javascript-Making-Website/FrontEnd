@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>음악 감정 추천</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  transition: background-color 0.8s ease-in-out; /* 배경색 부드럽게 변화 */
+}
+
+header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 15px 20px; 
+  background-color: #f5f5f5; 
+  flex-wrap: wrap; 
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+}
+
+#emotionButtons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+#emotionButtons button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: transform 0.2s, background-color 0.2s, opacity 0.2s;
+  background-color: #eee;
+}
+
+#emotionButtons button:nth-child(1):hover { background-color: #FFF9C4; }
+#emotionButtons button:nth-child(2):hover { background-color: #D6F0FF; }
+#emotionButtons button:nth-child(3):hover { background-color: #DFFFD6; }
+#emotionButtons button:nth-child(4):hover { background-color: #FFB6B6; }
+#emotionButtons button:nth-child(5):hover { background-color: #FFD1E0; }
+
+#emotionButtons button:hover { transform: scale(1.05); }
+#emotionButtons button.active { opacity: 1; }
+
+#searchSection { display: flex; gap: 10px; flex: 1; min-width: 250px; margin-bottom: 10px; }
+#searchInput { flex: 0 0 180px; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
+#searchBtn { padding: 10px 15px; border: none; border-radius: 8px; background-color: #4CAF50; color: white; cursor: pointer; font-weight: bold; transition: background-color 0.2s; }
+#searchBtn:hover { background-color: #45a049; }
+
+#headerButtons { display: flex; gap: 10px; align-items: center; }
+#headerButtons button {
+  padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer;
+  font-weight: bold; background-color: #2196F3; color: white; transition: background-color 0.2s;
+}
+#headerButtons button:hover { background-color: #1976D2; }
+
+#searchResults, #recommendations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.song {
+  display: flex;
+  align-items: center;
+  background-color: rgba(255,255,255,0.9);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+.song:hover { transform: scale(1.02); }
+.song img { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; margin-right: 15px; }
+.song a { text-decoration: none; color: #333; font-weight: bold; }
+
+h3 { margin-left: 20px; }
+
+@media (max-width: 600px){
+  #searchSection { flex-direction: column; }
+  #searchBtn { width: 100%; }
+  .song { flex-direction: column; align-items: flex-start; }
+  .song img { margin-bottom: 10px; }
+  #headerButtons { margin-top: 10px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div id="emotionButtons">
+    <button>기쁨</button>
+    <button>슬픔</button>
+    <button>편안함</button>
+    <button>분노</button>
+    <button>설렘</button>
+  </div>
+
+  <div id="searchSection">
+    <input type="text" id="searchInput" placeholder="노래 검색">
+    <button id="searchBtn">검색</button>
+  </div>
+
+  <div id="headerButtons">
+    <button id="homeBtn">홈</button>
+    <button id="playlistBtn">내 재생목록</button>
+    <button id="loginBtn">로그인</button>
+  </div>
+</header>
+
+<h3>검색 결과</h3>
+<div id="searchResults"></div>
+
+<h3>추천곡</h3>
+<div id="recommendations"></div>
+
+<script>
+const API_KEY = 'YOUR_YOUTUBE_API_KEY'; 
+
+const searchBtn = document.getElementById('searchBtn');
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+const recommendations = document.getElementById('recommendations');
+const emotionButtons = document.querySelectorAll('#emotionButtons button');
+
+const homeBtn = document.getElementById('homeBtn');
+const playlistBtn = document.getElementById('playlistBtn');
+const loginBtn = document.getElementById('loginBtn');
+
+const emotionColors = {
+  '기쁨': '#FFF9C4',
+  '슬픔': '#D6F0FF',
+  '편안함': '#DFFFD6',
+  '분노': '#FFB6B6',
+  '설렘': '#FFD1E0'
+};
+
+const emotionQueries = {
+  '기쁨': 'happy song',
+  '슬픔': 'sad song',
+  '편안함': 'relaxing music',
+  '분노': 'angry music',
+  '설렘': 'exciting song'
+};
+
+function searchYouTube(query, targetDiv){
+  targetDiv.innerHTML = '<p>검색 중...</p>';
+  fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&key=${API_KEY}&maxResults=12`)
+    .then(res => res.json())
+    .then(data => {
+      targetDiv.innerHTML = '';
+      if(!data.items || data.items.length===0){
+        targetDiv.innerHTML = '<p>검색 결과가 없습니다.</p>';
+        return;
+      }
+      data.items.forEach(item=>{
+        const videoId = item.id.videoId;
+        const title = item.snippet.title;
+        const thumbnail = item.snippet.thumbnails.medium.url;
+
+        const div = document.createElement('div');
+        div.className = 'song';
+        div.innerHTML = `
+          <img src="${thumbnail}" alt="${title}" />
+          <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank">${title}</a>
+        `;
+        targetDiv.appendChild(div);
+      });
+    })
+    .catch(err=>{
+      console.error(err);
+      targetDiv.innerHTML = '<p>검색 중 오류가 발생했습니다.</p>';
+    });
+}
+
+// 감정 버튼 클릭
+emotionButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const emotion = btn.textContent;
+    document.body.style.backgroundColor = emotionColors[emotion];
+    emotionButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    searchYouTube(emotionQueries[emotion], recommendations);
+  });
+});
+
+// 검색 버튼 클릭
+searchBtn.addEventListener('click', ()=>{
+  const query = searchInput.value.trim();
+  if(!query){
+    searchResults.innerHTML = '<p>검색어를 입력하세요.</p>';
+    return;
+  }
+  searchYouTube(query, searchResults);
+});
+
+// Enter 키로 검색
+searchInput.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){
+    searchBtn.click();
+  }
+});
+
+// 홈, 재생목록, 로그인 버튼 클릭 (예시)
+homeBtn.addEventListener('click', ()=>{ alert('홈 클릭'); });
+playlistBtn.addEventListener('click', ()=>{ alert('내 재생목록 클릭'); });
+loginBtn.addEventListener('click', ()=>{ alert('로그인 클릭'); });
+
+</script>
+
+</body>
+</html>
