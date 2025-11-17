@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Emotion Playlist · Playlists</title>
+  <link rel="stylesheet" href="./assets/styles.css"/>
+</head>
+<body data-mood="calm">
+  <header class="topbar">
+    <div class="brand">📂 재생목록</div>
+    <nav class="nav">
+      <a href="./home.html" class="btn">홈</a>
+      <a href="./player.html" class="btn">감상</a>
+      <a href="./search.html" class="btn">검색</a>
+      <a href="./login.html" id="loginLink" class="btn">로그인</a>
+      <span id="userBadge" class="badge hidden"></span>
+      <button id="logoutBtn" class="btn hidden">로그아웃</button>
+    </nav>
+  </header>
+
+  <main class="grid">
+    <section class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="title">내 재생목록</div>
+        <div style="display:flex;gap:8px">
+          <input id="plTitle" placeholder="재생목록 이름"
+            style="padding:8px;border-radius:8px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
+          <button id="createPL" class="btn primary">생성</button>
+        </div>
+      </div>
+      <div id="myLists" class="list"></div>
+    </section>
+
+    <aside class="panel">
+      <div class="title" style="margin-bottom:8px">공유 재생목록</div>
+      <div id="publicLists" class="list"></div>
+    </aside>
+  </main>
+
+  <!-- 전역 API/IIFE 먼저 로드 -->
+  <script src="./assets/api.js"></script>
+  <!-- 헤더 로그인 상태 동기화 (API 뒤에) -->
+  <script src="./assets/auth.js"></script>
+
+  <script>
+    // 로그인 상태 표시 갱신은 auth.js 내부에서 처리됨
+
+    async function renderMy() {
+      const wrap = document.getElementById('myLists');
+      wrap.innerHTML = '';
+
+      try {
+        // 현재 API는 playlists()가 { items } 반환
+        const { items } = await API.playlists();
+
+        if (!items || items.length === 0) {
+          wrap.innerHTML = '<div class="sub">재생목록이 없습니다.</div>';
+          return;
+        }
+
+        items.forEach(pl => {
+          const card = document.createElement('div');
+          card.className = 'panel';
+          card.style.marginBottom = '8px';
+          card.innerHTML = `
+            <div class="title">
+              ${pl.title} ${pl.is_public ? '<span class="badge">공개</span>' : ''}
+            </div>
+          `;
+
+          (pl.items || []).forEach(t => {
+            const row = document.createElement('div');
+            row.className = 'item';
+            const thumb = t.thumb || '';
+            const artist = t.artist || '';
+            const source = t.source || '';
+            row.innerHTML = `
+              <img src="${thumb}" alt="thumb"/>
+              <div>
+                <div class="title">${t.title}</div>
+                <div class="sub">${artist} · <span class="badge">${source}</span></div>
+              </div>
+              <button class="btn">삭제</button>
+            `;
+
+            // 삭제 버튼 (현재 API 시그니처에 맞춤)
+            row.querySelector('.btn').onclick = async (e) => {
+              e.stopPropagation();
+              await API.removeFromPlaylist({ playlistId: pl.id, trackId: t.track_id });
+              await renderMy();
+            };
+
+            // 행 클릭 시 플레이어로 이동 (현재 트랙 지정)
+            row.onclick = () => {
+              localStorage.setItem('currentTrackId', t.track_id);
+              location.href = './player.html';
+            };
+
+            card.appendChild(row);
+          });
+
+          wrap.appendChild(card);
+        });
+      } catch (err) {
+        if (err && (err.status === 401 || err.error === 'login required')) {
+          wrap.innerHTML = '<div class="sub">로그인 후 사용 가능합니다.</div>';
+        } else {
+          wrap.innerHTML = '<div class="sub">목록을 불러올 수 없습니다.</div>';
+          console.warn(err);
+        }
+      }
+    }
+
+    async function renderPublic() {
+      const wrap = document.getElementById('publicLists');
+      wrap.innerHTML = '';
+      try {
+        const { items } = await API.publicPlaylists();
+        if (!items || items.length === 0) {
+          wrap.innerHTML = '<div class="sub">공개 재생목록이 없습니다.</div>';
+          return;
+        }
+        items.forEach(pl => {
+          const el = document.createElement('div');
+          el.className = 'panel';
+          el.style.marginBottom = '8px';
+          el.innerHTML = `
+            <div class="title">${pl.title} <span class="badge">공개</span></div>
+            <div class="sub">재생목록 ID: ${pl.id}</div>
+          `;
+          wrap.appendChild(el);
+        });
+      } catch (e) {
+        wrap.innerHTML = '<div class="sub">공개 재생목록을 불러올 수 없습니다.</div>';
+        console.warn(e);
+      }
+    }
+
+    document.getElementById('createPL').onclick = async () => {
+      const titleEl = document.getElementById('plTitle');
+      const title = titleEl.value.trim();
+      if (!title) { alert('재생목록 이름을 입력하세요.'); titleEl.focus(); return; }
+
+      try {
+        // 현재 API 시그니처에 맞춤
+        await API.createPlaylist({ title, isPublic: false });
+        titleEl.value = '';
+        await renderMy();
+      } catch (e) {
+        if (e && (e.status === 401 || e.error === 'login required')) {
+          alert('로그인 후 이용해 주세요.');
+          location.href = './login.html';
+        } else {
+          alert('생성 실패');
+          console.warn(e);
+        }
+      }
+    };
+
+    // 초기 렌더
+    renderMy();
+    renderPublic();
+  </script>
+</body>
+</html>

@@ -10,7 +10,7 @@
   <header class="topbar">
     <div class="brand">🔎 Search</div>
     <nav class="nav">
-      <a href="./index.html" class="btn">홈</a>
+      <a href="./home.html" class="btn">홈</a>
       <a href="./playlist.html" class="btn">내 재생목록</a>
       <a href="./login.html" class="btn" id="loginLink">로그인</a>
       <span id="userBadge" class="badge hidden"></span>
@@ -30,24 +30,26 @@
 
   <footer class="foot">결과 클릭 시 곡을 선택하고 홈으로 이동합니다.</footer>
 
-  <script src="./assets/auth.js"></script>
+  <!-- 전역 API 먼저 -->
   <script src="./assets/api.js"></script>
-  <script>
-    Auth.syncHeader();
+  <!-- 헤더 로그인 상태 동기화 (API 뒤에 로드) -->
+  <script src="./assets/auth.js"></script>
 
+  <script>
     function itemEl(track){
       const el = document.createElement('div');
       el.className = 'item';
+      const thumb = track.thumb || '';
       el.innerHTML = `
-        <img src="${track.thumb}" alt="thumb" />
+        <img src="${thumb}" alt="thumb" />
         <div>
           <div class="t">${API.cleanTitle(track.title)}</div>
-          <div class="s">${track.artist} · <span class="badge">${track.source}</span></div>
+          <div class="s">${track.artist ?? ''} · <span class="badge">${track.source ?? ''}</span></div>
         </div>
       `;
       el.onclick = () => {
         localStorage.setItem('currentTrackId', track.id);
-        window.location.href = './index.html';
+        window.location.href = './home.html';
       };
       return el;
     }
@@ -64,6 +66,7 @@
       holder.innerHTML = '';
       API.MOODS.forEach(m => {
         const b = document.createElement('button');
+        b.type = 'button';
         b.className = 'chip';
         b.textContent = m.label;
         b.onclick = () => { document.body.setAttribute('data-mood', m.key); };
@@ -71,16 +74,29 @@
       });
     })();
 
-    // 검색 이벤트
-    document.getElementById('searchForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const q = document.getElementById('searchInput').value.trim();
-      const res = API.searchLocal(q); // 추후 /api/search 대체
-      render(res);
-    });
+    // 검색 이벤트 (백엔드 호출로 변경)
+  document.getElementById('searchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = document.getElementById('searchInput').value.trim();
 
-    // 초기 렌더
-    render(API.list());
+    try {
+      const r = await API.search({ q });   // ← 백엔드 /api/search 호출
+      render(r.items);
+    } catch (err) {
+      console.warn('search failed, fallback to local', err);
+      render(API.list());                  // 서버 안 켜져 있으면 임시 폴백
+    }
+  });
+
+  // 초기 렌더도 백엔드로 시도(안되면 더미)
+  (async () => {
+    try {
+      const r = await API.search({});
+      render(r.items);
+    } catch {
+      render(API.list());
+    }
+  })();
   </script>
 </body>
 </html>
