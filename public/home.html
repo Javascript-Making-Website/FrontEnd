@@ -19,34 +19,79 @@
     </nav>
   </header>
 
-  <main class="panel" style="max-width:700px;margin:16px auto">
-    <div class="title" style="margin-bottom:8px">오늘 당신의 감정은?</div>
-    <form id="quizForm" class="quiz">
-      <div class="q">
-        <div class="sub">1) 지금 날씨가 좋다면 어떤 느낌?</div>
-        <label><input type="radio" name="q1" value="happy" required> 기쁨</label>
-        <label><input type="radio" name="q1" value="calm"> 차분</label>
-        <label><input type="radio" name="q1" value="sad"> 슬픔</label>
+  <main id="wizard" class="panel" style="max-width:900px;margin:16px auto">
+    <div class="title" style="margin-bottom:8px">오늘의 기분으로 추천받기</div>
+
+    <!-- 진행 점 표시 -->
+    <div class="dots" style="display:flex;gap:4px;margin-bottom:16px">
+      <span class="dot active" data-step-dot="1">•</span>
+      <span class="dot" data-step-dot="2">•</span>
+      <span class="dot" data-step-dot="3">•</span>
+      <span class="dot" data-step-dot="4">•</span>
+      <span class="dot" data-step-dot="5">•</span>
+    </div>
+
+    <!-- STEP 1: 기본 감정 -->
+    <section id="step1" class="step" aria-labelledby="q1">
+      <h2 id="q1">오늘은 무슨 일이 있었나요?</h2>
+      <div class="choices column">
+        <button class="choice big" data-emotion="happy">😊 기쁨</button>
+        <button class="choice big" data-emotion="sad">😲 슬픔</button>
+        <button class="choice big" data-emotion="angry">😡 분노</button>
+        <button class="choice big" data-emotion="calm">🌿 차분</button>
+        <button class="choice big" data-emotion="passion">🔥 열정</button>
       </div>
-      <div class="q">
-        <div class="sub">2) 지금 당장 먹고 싶은 건?</div>
-        <label><input type="radio" name="q2" value="angry" required> 매운 떡볶이</label>
-        <label><input type="radio" name="q2" value="happy"> 달콤한 케이크</label>
-        <label><input type="radio" name="q2" value="calm"> 따뜻한 차</label>
+    </section>
+
+    <!-- STEP 2: 하위 감정 (동적 생성) -->
+    <section id="step2" class="step hidden" aria-labelledby="q2">
+      <h2 id="q2">조금 더 구체적으로 말해볼까요?</h2>
+      <div id="subEmotionContainer" class="choices column"></div>
+      <div class="sub" id="step2Hint"></div>
+    </section>
+
+    <!-- STEP 3: 음악 분위기 선택 -->
+    <section id="step3" class="step hidden" aria-labelledby="q3">
+      <h2 id="q3">지금은 어떤 분위기의 음악이 좋으신가요?</h2>
+      <div class="choices grid">
+        <button class="choice" data-tone="boost">🎶 기분이 더 좋아지는</button>
+        <button class="choice" data-tone="soothe">🌙 마음을 달래주는</button>
+        <button class="choice" data-tone="energy">⚡ 힘이 나는</button>
+        <button class="choice" data-tone="breeze">☁️ 아무 생각 없이 듣는</button>
+        <button class="choice" data-tone="focus">🧘 집중하기 좋은</button>
       </div>
-      <div class="q">
-        <div class="sub">3) 지금 혼자 vs 함께?</div>
-        <label><input type="radio" name="q3" value="energetic" required> 신나게 함께(에너지)</label>
-        <label><input type="radio" name="q3" value="sad"> 혼자 있고 싶다</label>
-        <label><input type="radio" name="q3" value="calm"> 상관없다</label>
+    </section>
+
+    <!-- STEP 4: 장르/국가 선택 -->
+    <section id="step4" class="step hidden" aria-labelledby="q4">
+      <h2 id="q4">어떤 음악 장르가 가장 끌리나요?</h2>
+      <div class="choices grid">
+        <button class="choice" data-genre="kpop" data-nation="kr">🇰🇷 K-POP</button>
+        <button class="choice" data-genre="jpop" data-nation="jp">🇯🇵 J-POP</button>
+        <button class="choice" data-genre="pop" data-nation="global">🌍 POP (글로벌)</button>
+        <button class="choice" data-genre="rock" data-nation="global">🎸 락 / 메탈</button>
+      </div>
+    </section>
+
+    <!-- STEP 5: 색 / 테마 선택 -->
+    <section id="step5" class="step hidden" aria-labelledby="q5">
+      <h2 id="q5">지금 기분에 어울리는 색은 어떤가요?</h2>
+      <div class="choices grid">
+        <button class="choice" data-color="warm">🔴 따뜻한</button>
+        <button class="choice" data-color="cool">🔵 차가운</button>
+        <button class="choice" data-color="dark">⚫ 어두운</button>
+        <button class="choice" data-color="light">⚪ 밝은</button>
       </div>
 
-      <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px">
-        <a class="btn" href="./player.html">그냥 감상하러 가기</a>
-        <button type="submit" class="btn primary">결과로 감상하러 가기 →</button>
-      </div>
-      <div class="sub" style="margin-top:6px">※ 로그인은 재생목록 기능에서만 필요합니다.</div>
-    </form>
+      <section id="result" class="step" aria-live="polite" style="margin-top:18px">
+        <h2>오늘의 추천 준비 완료 🎧</h2>
+        <div class="resultbox" id="resultText" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <a class="btn primary" id="goPlayer" href="./player.html">플레이어로 이동</a>
+          <button class="btn" id="restart">처음부터 다시</button>
+        </div>
+      </section>
+    </section>
   </main>
 
   <script src="./assets/api.js"></script>
