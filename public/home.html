@@ -10,7 +10,7 @@
   <header class="topbar">
     <div class="brand">🧠 감정 테스트</div>
     <nav class="nav">
-      <a href="./player.html" class="btn">감상</a>
+      <!-- 🔥 감상 버튼 제거 -->
       <a href="./search.html" class="btn">검색</a>
       <a href="./playlist.html" class="btn">내 재생목록</a>
       <a href="./login.html" id="loginLink" class="btn">로그인</a>
@@ -22,7 +22,7 @@
   <main id="wizard" class="panel" style="max-width:900px;margin:16px auto">
     <div class="title" style="margin-bottom:8px">오늘의 기분으로 추천받기</div>
 
-    <!-- 진행 점 표시 -->
+    <!-- 진행 점 표시 (1~5: 4단계 + 결과) -->
     <div class="dots" style="display:flex;gap:4px;margin-bottom:16px">
       <span class="dot active" data-step-dot="1">•</span>
       <span class="dot" data-step-dot="2">•</span>
@@ -73,17 +73,10 @@
       </div>
     </section>
 
-    <!-- STEP 5: 색 / 테마 선택 -->
+    <!-- STEP 5: 색 질문 제거, 결과만 남김 -->
     <section id="step5" class="step hidden" aria-labelledby="q5">
-      <h2 id="q5">지금 기분에 어울리는 색은 어떤가요?</h2>
-      <div class="choices grid">
-        <button class="choice" data-color="warm">🔴 따뜻한</button>
-        <button class="choice" data-color="cool">🔵 차가운</button>
-        <button class="choice" data-color="dark">⚫ 어두운</button>
-        <button class="choice" data-color="light">⚪ 밝은</button>
-      </div>
-
-      <section id="result" class="step" aria-live="polite" style="margin-top:18px">
+      <!-- 색 질문/버튼들은 삭제 → 바로 결과만 표시 -->
+      <section id="result" class="step hidden" aria-live="polite" style="margin-top:18px">
         <h2>오늘의 추천 준비 완료 🎧</h2>
         <div class="resultbox" id="resultText" style="margin-bottom:8px"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">

@@ -8,7 +8,6 @@
   <style>
     .iframe-wrap{ position:relative; padding-top:56.25%; background:#000; }
     .iframe-wrap > #player{ position:absolute; inset:0; }
-    .item.active{ outline:2px solid #b39dff; }
   </style>
 </head>
 <body data-mood="calm">
@@ -25,6 +24,7 @@
   </header>
 
   <main class="grid">
+    <!-- 메인 플레이어 영역 -->
     <section class="panel">
       <div class="iframe-wrap">
         <div id="player"></div>
@@ -46,35 +46,23 @@
         <span id="nowSource" class="badge">–</span>
       </div>
 
-      <div class="moods" id="rateMoods" style="margin-top:10px"></div>
+      <!-- 이 곡에 대한 감정 평가 영역 -->
+      <div class="rating-block" style="margin-top:10px">
+        <div class="sub">이 곡을 듣고 난 지금 기분은?</div>
+        <div class="moods" id="rateMoods" style="margin-top:8px"></div>
+      </div>
     </section>
 
+    <!-- 오른쪽 리스트: 추천 / 검색 결과 / 재생목록 곡 -->
     <aside class="panel">
       <div class="sub" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span>추천</span>
-        <div id="moodChips" class="moods"></div>
+        <span id="sideTitle">추천</span>
       </div>
       <div id="recList" class="list"></div>
       <div style="display:flex;justify-content:flex-end;margin-top:8px">
         <a id="moreRecsBtn" class="btn">다른 곡도 추천받기 →</a>
       </div>
     </aside>
-
-    <!-- 임베드 불가 모달 -->
-    <div id="embedBlockedPopup" class="modal hidden">
-      <div class="box">
-        <div class="title">이 영상은 사이트 안에서 재생할 수 없어요.</div>
-        <p style="margin-bottom:14px;">
-          해당 영상은 유튜브 정책 때문에 외부 사이트에서 재생이 차단되었습니다.<br>
-          아래 중에서 선택해주세요.
-        </p>
-
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button id="ignoreBlocked" class="btn">닫기</button>
-          <a id="openBlockedYT" class="btn primary" target="_blank">YouTube에서 열기</a>
-        </div>
-      </div>
-    </div>
   </main>
 
   <!-- 재생 종료 후 팝업 -->
@@ -95,24 +83,38 @@
   <script src="https://www.youtube.com/iframe_api"></script>
 
   <script>
-    // ────────────────────────── 유틸
+    // ────────────────────────── 유틸 & 상태
     const $ = (s) => document.querySelector(s);
     const MOODS = API.MOODS;
 
-    const urlParams    = new URLSearchParams(location.search);
-    const initialMood  = urlParams.get('mood')  || 'calm';
-    const initialGenre = urlParams.get('genre') || '';
-    const initialNation= urlParams.get('nation')|| '';
-    const fromSearch   = (urlParams.get('from') || '') === 'search';
-    const idParam      = urlParams.get('id') || null;
+    const urlParams     = new URLSearchParams(location.search);
+    const initialMood   = urlParams.get('mood')   || 'calm';
+    const initialGenre  = urlParams.get('genre')  || '';
+    const initialNation = urlParams.get('nation') || '';
+    const fromParam     = urlParams.get('from')   || '';
+    const playlistIdParam = urlParams.get('playlistId') || '';
 
+    // body에 기본 mood 적용
     document.body.setAttribute('data-mood', initialMood);
 
+    // 모드: recs / search / playlist
+    let mode = 'recs';
+    let ytPlayer = null;
+    let currentTrack = null;
+    let currentParams = { mood: initialMood, genre: initialGenre, nation: initialNation };
+
+    // 큐(검색 결과나 재생목록 곡들)
+    let queue = [];
+    let queueIndex = -1;
+
+    // 로그인 필요한 동작 감싸기
     async function gate(fn, { silent = false } = {}) {
       try {
         const { user } = await API.me();
         if (!user) {
-          if (!silent) alert('로그인 후 이용 가능한 기능입니다.');
+          if (!silent) {
+            alert('로그인 후 이용 가능한 기능입니다.');
+          }
           return;
         }
         await fn();
@@ -126,6 +128,7 @@
       .replace(/\s{2,}/g, ' ')
       .trim();
 
+    // YouTube ID 추출: "youtube:ID" 또는 URL에서 v= 추출
     function getYouTubeId(track) {
       if (!track) return '';
       if (typeof track.id === 'string' && track.id.startsWith('youtube:')) {
@@ -136,13 +139,7 @@
       return m ? m[1] : '';
     }
 
-    // ────────────────────────── 상태
-    let ytPlayer = null;
-    let currentTrack = null;
-    let currentParams = { mood: initialMood, genre: initialGenre, nation: initialNation };
-    let lastRecs = [];   // 오른쪽 추천 목록 (검색에서 온 경우 그대로 사용)
-
-    // YouTube Iframe API 콜백
+    // ────────────────────────── YouTube Iframe API
     window.onYouTubeIframeAPIReady = function () {
       ytPlayer = new YT.Player('player', {
         height: '100%',
@@ -158,33 +155,28 @@
     };
 
     async function onReady(){
-      renderMoodChips();
-      setupMoodChange();
+      const p = new URLSearchParams(location.search);
+      const mood   = p.get('mood')   || 'calm';
+      const genre  = p.get('genre')  || '';
+      const nation = p.get('nation') || '';
+      const from   = p.get('from')   || '';
+      const pid    = p.get('playlistId') || '';
 
-      // 1) 검색 화면에서 넘어온 경우 → lastSearchList 그대로 사용
-      if (fromSearch) {
-        let list = [];
-        try {
-          list = JSON.parse(localStorage.getItem('lastSearchList') || '[]') || [];
-        } catch { list = []; }
+      currentParams = { mood, genre, nation };
+      document.body.setAttribute('data-mood', mood);
 
-        if (list.length) {
-          lastRecs = list;
-          const first = list.find(x => String(x.id) === String(idParam)) || list[0];
-          setNow(first);
-          renderRecList(lastRecs, first.id);
-          return;   // ★ /api/recs 호출 안 함 → 시드 데이터로 안 떨어짐
-        }
-      }
-
-      // 2) 기본 동작: 서버 추천 사용 (홈에서 바로 온 경우 등)
-      await refreshRecs();
-      if (idParam) {
-        const target = lastRecs.find(x => String(x.id) === String(idParam));
-        if (target) {
-          setNow(target);
-          renderRecList(lastRecs, target.id);
-        }
+      if (pid) {
+        // 재생목록에서 진입
+        mode = 'playlist';
+        await initFromPlaylist(pid);
+      } else if (from === 'search') {
+        // 검색 결과에서 진입
+        mode = 'search';
+        await initFromSearch();
+      } else {
+        // 기본 추천 모드
+        mode = 'recs';
+        await refreshRecs();
       }
     }
 
@@ -197,29 +189,142 @@
     function onError(e){
       console.warn('YouTube player error:', e.data);
 
+      // 유튜브 정책 때문에 임베드가 막힌 경우 코드 101, 150
       if (e.data === 101 || e.data === 150) {
-        const popup = document.getElementById('embedBlockedPopup');
-        const openBtn = document.getElementById('openBlockedYT');
-        const closeBtn = document.getElementById('ignoreBlocked');
-
         const link = document.getElementById('openOnYT');
-        if (link && link.href) {
-          openBtn.href = link.href;   // YouTube 링크 연결
-        }
+        const msg =
+          '이 영상은 유튜브에서 외부 사이트 재생이 막혀 있어서,\n' +
+          '사이트 안에서는 재생할 수 없어요.\n\n' +
+          '새 탭에서 YouTube로 바로 열까요?';
 
-        popup.classList.remove('hidden');   // 모달 열기
-        closeBtn.onclick = () => popup.classList.add('hidden');
+        if (link && link.href && link.href !== '#' && confirm(msg)) {
+          window.open(link.href, '_blank');   // 사용자가 원할 때만 이동
+        }
       }
     }
 
+    // ────────────────────────── 추천 모드: 감정 기반 추천
+    async function refreshRecs(){
+      const { mood, genre, nation } = currentParams;
+      let items = [];
+      try{
+        const r = await API.recs({ mood, genre, nation });
+        items = r.items || [];
+      }catch{
+        items = API.list();
+      }
 
-    // ────────────────────────── 추천 목록 렌더링
-    function renderRecList(list, highlightId){
       const holder = $('#recList');
       holder.innerHTML = '';
-      list.forEach(t => {
+      $('#sideTitle').textContent = '추천';
+
+      items.forEach(t=>{
         const el = document.createElement('div');
-        el.className = 'item' + (highlightId && String(highlightId) === String(t.id) ? ' active' : '');
+        el.className = 'item';
+        const thumb = t.thumb || '';
+        el.innerHTML = `
+          <img src="${thumb}" alt="thumb"/>
+          <div>
+            <div class="title">${cleanTitle(t.title || '')}</div>
+            <div class="sub">${t.artist || ''} · <span class="badge">${t.source || ''}</span></div>
+          </div>
+        `;
+        el.onclick = ()=> setNow(t);
+        holder.appendChild(el);
+      });
+
+      if (!currentTrack && items[0]) setNow(items[0]);
+    }
+
+    // ────────────────────────── 검색 결과 모드
+    async function initFromSearch() {
+      const p = new URLSearchParams(location.search);
+      const idParam = p.get('id');
+
+      // lastSearchList 불러오기
+      let list = [];
+      try {
+        const saved = localStorage.getItem('lastSearchList');
+        if (saved) list = JSON.parse(saved) || [];
+      } catch (e) {
+        console.warn('failed to parse lastSearchList', e);
+      }
+
+      if (!Array.isArray(list) || list.length === 0) {
+        // 폴백: 추천 모드로
+        mode = 'recs';
+        await refreshRecs();
+        return;
+      }
+
+      // context(감정/장르/국가)도 있으면 반영
+      try {
+        const ctxStr = localStorage.getItem('lastSearchContext');
+        if (ctxStr) {
+          const ctx = JSON.parse(ctxStr);
+          if (ctx.mood)   currentParams.mood   = ctx.mood;
+          if (ctx.genre)  currentParams.genre  = ctx.genre;
+          if (ctx.nation) currentParams.nation = ctx.nation;
+          document.body.setAttribute('data-mood', currentParams.mood);
+        }
+      } catch (e) {
+        console.warn('failed to parse lastSearchContext', e);
+      }
+
+      queue = list;
+      const idx = list.findIndex(x => String(x.id) === String(idParam));
+      queueIndex = idx >= 0 ? idx : 0;
+
+      $('#sideTitle').textContent = '검색 결과';
+      renderQueueList();
+      setNow(queue[queueIndex]);
+    }
+
+    // ────────────────────────── 재생목록 모드
+    async function initFromPlaylist(pid) {
+      const holderTitle = $('#sideTitle');
+      if (holderTitle) holderTitle.textContent = '재생목록';
+
+      try {
+        const { items } = await API.playlists(); // 내 재생목록들만
+        const pl = (items || []).find(x => String(x.id) === String(pid));
+
+        if (!pl) {
+          // 못 찾으면 그냥 추천 모드
+          mode = 'recs';
+          await refreshRecs();
+          return;
+        }
+
+        const tracks = pl.items || [];
+        if (!tracks.length) {
+          mode = 'recs';
+          await refreshRecs();
+          return;
+        }
+
+        queue = tracks;
+        queueIndex = 0;
+
+        if (holderTitle) holderTitle.textContent = `재생목록 · ${pl.title}`;
+
+        renderQueueList();
+        setNow(queue[queueIndex]);
+      } catch (e) {
+        console.warn('initFromPlaylist failed', e);
+        mode = 'recs';
+        await refreshRecs();
+      }
+    }
+
+    // 큐(검색/재생목록) 리스트 렌더링
+    function renderQueueList() {
+      const holder = $('#recList');
+      holder.innerHTML = '';
+
+      queue.forEach((t, idx) => {
+        const el = document.createElement('div');
+        el.className = 'item';
         const thumb = t.thumb || '';
         el.innerHTML = `
           <img src="${thumb}" alt="thumb"/>
@@ -229,56 +334,17 @@
           </div>
         `;
         el.onclick = () => {
+          queueIndex = idx;
           setNow(t);
-          renderRecList(list, t.id);
         };
         holder.appendChild(el);
       });
     }
 
-    async function refreshRecs(){
-      const { mood, genre, nation } = currentParams;
-      let items = [];
-      try{
-        const r = await API.recs({ mood, genre, nation });
-        items = r.items || [];
-      }catch{
-        items = API.list();  // 유튜브 막힌 경우 폴백
-      }
-      lastRecs = items;
-      renderRecList(lastRecs, currentTrack?.id);
-      if (!currentTrack && lastRecs[0]) setNow(lastRecs[0]);
-    }
-
-    // ────────────────────────── 감정 칩
-    function setupMoodChange() {
-      const chips = $('#moodChips');
-      chips.addEventListener('click', async (ev) => {
-        const b = ev.target.closest('button[data-mood]');
-        if (!b) return;
-        const mood = b.dataset.mood;
-        document.body.setAttribute('data-mood', mood);
-        currentParams.mood = mood;
-        await refreshRecs();
-      });
-    }
-
-    function renderMoodChips() {
-      const holder = $('#moodChips');
-      holder.innerHTML = '';
-      MOODS.forEach(m => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'chip' + (m.key === initialMood ? ' active' : '');
-        b.dataset.mood = m.key;
-        b.textContent = m.label;
-        holder.appendChild(b);
-      });
-    }
-
-    // ────────────────────────── 현재 트랙 세팅
+    // ────────────────────────── 현재 곡 설정
     function setNow(t) {
       currentTrack = t;
+      if (!t) return;
 
       const vid = getYouTubeId(t);
       if (ytPlayer && ytPlayer.loadVideoById && vid) ytPlayer.loadVideoById(vid);
@@ -291,41 +357,49 @@
 
       renderRateChips();
 
+      // 시청기록 (비로그인은 조용히 무시)
       gate(async () => { await API.watch(t.id); }, { silent: true });
     }
 
+    // 이 곡에 대한 감정 평가 버튼들
     function renderRateChips() {
       const box = $('#rateMoods');
       box.innerHTML = '';
       MOODS.forEach(m => {
         const b = document.createElement('button');
-        b.className = 'chip';
+        b.className = 'chip rate-chip';
         b.textContent = m.label;
         b.onclick = () => gate(async () => {
           await API.rate(currentTrack.id, m.key);
+          currentParams.mood = m.key;                  // 현재 mood 변경
           document.body.setAttribute('data-mood', m.key);
-          currentParams.mood = m.key;
-          await refreshRecs();
-          alert(`"${m.label}"로 저장되었습니다.`);
+          // 추천 모드일 때만 추천 갱신
+          if (mode === 'recs') {
+            await refreshRecs();
+          }
+          alert(`"${m.label}"로 이 곡의 기분을 저장했어요.`);
         });
         box.appendChild(b);
       });
     }
 
+    // 재생 끝났을 때 팝업
     function showEndPopup() {
       const wrap = $('#afterPopup');
       const holder = $('#afterMoods');
       holder.innerHTML = '';
       MOODS.forEach(m => {
         const b = document.createElement('button');
-        b.className = 'chip';
+        b.className = 'chip rate-chip';
         b.textContent = m.label;
         b.onclick = () => gate(async () => {
           await API.rate(currentTrack.id, m.key);
-          document.body.setAttribute('data-mood', m.key);
           currentParams.mood = m.key;
+          document.body.setAttribute('data-mood', m.key);
           wrap.classList.add('hidden');
-          await refreshRecs();
+          if (mode === 'recs') {
+            await refreshRecs();
+          }
         });
         holder.appendChild(b);
       });
@@ -334,12 +408,13 @@
     }
 
     // ────────────────────────── 버튼들
-    $('#playBtn').onclick  = () => { try { ytPlayer.playVideo(); } catch {} };
-    $('#pauseBtn').onclick = () => { try { ytPlayer.pauseVideo(); } catch {} };
+    $('#playBtn').onclick = () => { try { ytPlayer.playVideo(); } catch { } };
+    $('#pauseBtn').onclick = () => { try { ytPlayer.pauseVideo(); } catch { } };
 
     $('#addToPlaylistBtn').onclick = () => gate(async () => {
       if (!currentTrack) return;
       let { items } = await API.playlists().catch(() => ({ items: [] }));
+      // 없으면 하나 생성
       if (!items || !items[0]) {
         const created = await API.createPlaylist({ title: '내 재생목록', isPublic: false });
         items = [{ id: created.id, title: '내 재생목록' }];
@@ -352,12 +427,11 @@
       alert('재생목록에 추가했습니다.');
     });
 
-    // "다른 곡도 추천받기" → 다시 search로
-    $('#moreRecsBtn').onclick = () => {
+    $('#moreRecsBtn').onclick = ()=> {
       const { mood, genre, nation } = currentParams;
       const sp = new URLSearchParams();
-      if (mood)   sp.set('mood', mood);
-      if (genre)  sp.set('genre', genre);
+      if (mood) sp.set('mood', mood);
+      if (genre) sp.set('genre', genre);
       if (nation) sp.set('nation', nation);
       location.href = `./search.html?${sp.toString()}`;
     };

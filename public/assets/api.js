@@ -179,7 +179,7 @@ const API = (() => {
     return fx(`${BASE}/api/logout`, { method: 'POST' });
   }
 
-  // ★ 여기 수정: pageToken 지원
+  // ★ pageToken 지원 검색
   async function search({ q, mood, genre, nation, pageToken } = {}) {
     try {
       const u = new URL(`${BASE}/api/search`);
@@ -187,11 +187,11 @@ const API = (() => {
       if (mood) u.searchParams.set('mood', mood);
       if (genre) u.searchParams.set('genre', genre);
       if (nation) u.searchParams.set('nation', nation);
-      if (pageToken) u.searchParams.set('pageToken', pageToken); // ★ 추가
+      if (pageToken) u.searchParams.set('pageToken', pageToken);
 
-      return await fx(u); // { items, nextPageToken } 그대로 리턴
+      return await fx(u); // { items, nextPageToken }
     } catch {
-      // 폴백: 로컬 더미 (페이지네이션은 지원 안 하고 전체만)
+      // 폴백: 로컬 더미 (페이지네이션 X)
       const items = searchLocal(q);
       const filtered = mood ? items.filter(t => t.moods?.includes(mood)) : items;
       return { items: filtered, nextPageToken: null };
@@ -240,13 +240,16 @@ const API = (() => {
     }
   }
 
+  // ✅ 내 재생목록 목록 (likes / liked / items 포함)
   async function playlists() {
-    try { return await fx(`${BASE}/api/playlists`); }
-    catch {
-      return { items: [{ id: 0, title: 'Local Playlist', is_public: 0, items: Playlist.get() }] };
+    try {
+      return await fx(`${BASE}/api/playlists`);
+    } catch {
+      return { items: [{ id: 0, title: 'Local Playlist', is_public: 0, items: Playlist.get(), likes: 0, liked: false }] };
     }
   }
 
+  // ✅ 재생목록 생성
   async function createPlaylist({ title, isPublic }) {
     try {
       return await fx(`${BASE}/api/playlists`, {
@@ -259,6 +262,7 @@ const API = (() => {
     }
   }
 
+  // ✅ 재생목록에 곡 추가
   async function addToPlaylist({ playlistId, trackId, position = 0 }) {
     try {
       return await fx(`${BASE}/api/playlist/items`, {
@@ -273,6 +277,7 @@ const API = (() => {
     }
   }
 
+  // ✅ 재생목록에서 곡 제거
   async function removeFromPlaylist({ playlistId, trackId }) {
     try {
       return await fx(`${BASE}/api/playlist/items`, {
@@ -286,9 +291,46 @@ const API = (() => {
     }
   }
 
-  async function publicPlaylists() {
-    try { return await fx(`${BASE}/api/playlists/public`); }
-    catch { return { items: [] }; }
+  // ⭐ 특정 재생목록 상세 (player에서 사용 예정)
+  async function playlistDetail(id) {
+    try {
+      return await fx(`${BASE}/api/playlists/${id}`);
+    } catch {
+      // 폴백: 로컬 재생목록을 한 개짜리 가짜 playlist라고 생각
+      return {
+        id: 0,
+        title: 'Local Playlist',
+        is_public: 0,
+        likes: 0,
+        owner_name: 'local',
+        items: Playlist.get()
+      };
+    }
+  }
+
+  // ⭐ 재생목록 좋아요 토글
+  async function togglePlaylistLike(id) {
+    try {
+      return await fx(`${BASE}/api/playlists/${id}/like`, {
+        method: 'POST'
+      });
+    } catch {
+      // 폴백: 로컬에서는 좋아요 상태를 굳이 저장 안 해도 됨
+      return { ok: true, liked: true, likes: 0, fallback: true };
+    }
+  }
+
+  // ✅ 공개 재생목록 목록 (최근 / 인기)
+  //    API.publicPlaylists({ sort: 'recent' | 'popular', limit })
+  async function publicPlaylists({ sort = 'recent', limit = 20 } = {}) {
+    try {
+      const u = new URL(`${BASE}/api/playlists/public`);
+      if (sort) u.searchParams.set('sort', sort);
+      if (limit) u.searchParams.set('limit', String(limit));
+      return await fx(u);
+    } catch {
+      return { items: [] };
+    }
   }
 
   // ── localStorage 기반 (폴백용) ────────────────────────────────────────────
@@ -346,6 +388,7 @@ const API = (() => {
     me, login, logout,
     search, recs, rate, watch,
     playlists, createPlaylist, addToPlaylist, removeFromPlaylist,
+    playlistDetail, togglePlaylistLike,
     publicPlaylists,
   };
 })();

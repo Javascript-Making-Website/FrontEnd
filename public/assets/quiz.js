@@ -15,7 +15,7 @@
     tone: null,        // boost, soothe ...
     genre: null,       // kpop / jpop / pop / rock
     nation: null,      // kr / jp / global
-    color: null        // warm / cool / dark / light
+    color: null        // warm / cool / dark / light (-> 지금은 안 씀)
   };
 
   // 감정 → API의 mood 키로 매핑
@@ -27,7 +27,7 @@
     passion: 'energetic'
   };
 
-  // 상위 감정별 하위 감정 버튼 목록
+  // 상위 감정별 하위 감정 버튼 목록 (🔥 원래 쓰던 문구 그대로)
   const SUB_EMOTIONS = {
     happy: [
       '사랑이 넘친다',
@@ -123,30 +123,22 @@
     if (!btn) return;
     state.genre = btn.dataset.genre;
     state.nation = btn.dataset.nation || 'global';
+
+    // 5단계(결과 화면)으로 이동
     setStep(5);
 
-    // 결과 문구 미리 업데이트
+    // 결과 문구 업데이트 + 결과 섹션 표시
     updateResultText();
-  });
-
-  // ────────────────────────── STEP5: 색 / 테마
-  $('#step5').addEventListener('click', (e) => {
-    const btn = e.target.closest('button.choice');
-    if (!btn) return;
-
-    // 색 버튼을 눌렀을 때만 state.color 설정 (플레이어 이동/처음부터는 제외)
-    if (btn.dataset.color) {
-      state.color = btn.dataset.color;
-      updateResultText();
-    }
-
     const resultSec = document.getElementById('result');
-      if (resultSec) {
-        resultSec.classList.remove('hidden');
-        // 필요하면 살짝 스크롤
-        resultSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+    if (resultSec) {
+      resultSec.classList.remove('hidden');
+      resultSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   });
+
+  // ────────────────────────── STEP5: 색 / 테마 질문 제거
+  // 👉 더 이상 색을 고르지 않으므로 클릭 핸들러 자체를 쓰지 않음.
+  //    state.color 도 지금은 사용하지 않고, 나중에 필요하면 다시 살리면 됨.
 
   // 결과 문구 생성
   function updateResultText() {

@@ -192,3 +192,19 @@ img{ display:block; max-width:100% }
   border-top:1px solid rgba(255,255,255,.06);
   background:var(--panel);
 }
+
+
+/* 감상 페이지: 이 곡 평가용 감정 버튼 */
+.rating-block .sub {
+  color: #cbd5ff;
+  font-size: 0.9rem;
+}
+
+.chip.rate-chip {
+  background: #4338ca;   /* 보라색 계열로 눈에 띄게 */
+  color: #fff;
+}
+
+.chip.rate-chip:hover {
+  background: #4f46e5;
+}

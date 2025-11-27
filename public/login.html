@@ -11,34 +11,48 @@
     <div class="brand">🔐 로그인</div>
     <nav class="nav">
       <a href="./home.html" class="btn">홈</a>
-      <a href="./player.html" class="btn">감상</a>
       <a href="./search.html" class="btn">검색</a>
       <a href="./playlist.html" class="btn">재생목록</a>
     </nav>
   </header>
 
   <main class="panel" style="max-width:420px;margin:16px auto;">
-    <div class="title" style="margin-bottom:8px">닉네임으로 간편 로그인</div>
-    <div style="display:flex;gap:8px">
-      <input id="name" placeholder="닉네임/이름"
-        style="flex:1;padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
+    <div class="title" style="margin-bottom:8px">아이디로 로그인</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <input id="username" placeholder="아이디"
+        style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
+
+      <input id="password" type="password" placeholder="비밀번호"
+        style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
+
       <button id="go" class="btn primary">로그인</button>
+
+      <div class="sub" style="margin-top:4px">
+        아직 계정이 없나요?
+        <a href="./signup.html" class="btn" style="padding:4px 8px;margin-left:4px">회원가입</a>
+      </div>
     </div>
   </main>
 
-  <!-- 전역 API 로드 (IIFE) -->
+  <!-- 전역 API + auth -->
   <script src="./assets/api.js"></script>
+  <script src="./assets/auth.js"></script>
 
-  <!-- 전역 API 사용 -->
   <script>
-    const nameEl = document.getElementById('name');
-    const goBtn  = document.getElementById('go');
+    const idEl  = document.getElementById('username');
+    const pwEl  = document.getElementById('password');
+    const goBtn = document.getElementById('go');
 
     async function doLogin() {
-      const v = nameEl.value.trim();
-      if (!v) { alert('닉네임을 입력하세요.'); nameEl.focus(); return; }
+      const username = idEl.value.trim();
+      const password = pwEl.value;
+
+      if (!username) { alert('아이디를 입력하세요.'); idEl.focus(); return; }
+      if (!password) { alert('비밀번호를 입력하세요.'); pwEl.focus(); return; }
+
       try {
-        await API.login(v);
+        await API.login({ username, password });
         location.href = './home.html';
       } catch (e) {
         alert('로그인 실패: ' + (e?.error ?? '알 수 없는 오류'));
@@ -46,8 +60,11 @@
     }
 
     goBtn.addEventListener('click', doLogin);
-    nameEl.addEventListener('keydown', (e) => {
+    pwEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') doLogin();
+    });
+    idEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') pwEl.focus();
     });
   </script>
 </body>
