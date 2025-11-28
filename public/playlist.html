@@ -37,6 +37,34 @@
       box-shadow: 0 10px 25px rgba(0,0,0,.55);
     }
 
+    /* 재생목록 삭제 버튼 (호버 시 노출) */
+    .pl-delete-btn {
+      position: absolute;
+      bottom: 6px;
+      right: 8px;
+      padding: 4px 6px;
+      font-size: 13px;
+      border-radius: 999px;
+      border: none;
+      background: rgba(255, 80, 80, 0.9);
+      color: #fff;
+      cursor: pointer;
+      opacity: 0;                 /* 기본은 숨김 */
+      transform: translateY(4px); /* 살짝 내려가 있게 */
+      transition: opacity .15s ease, transform .15s ease;
+      z-index: 5;                 /* 재생 hover 위에 올라오게 */
+      pointer-events: none;       /* 기본은 클릭 안 됨 (호버 때 켜짐) */
+    }
+    .pl-card:hover .pl-delete-btn {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;       /* 카드에 호버되면 클릭 가능 */
+    }
+    .pl-delete-btn:hover {
+      background: rgba(255, 40, 40, 1);
+    }
+
+
     /* 커버(썸네일들 모인 사각형) */
     .pl-cover {
       position: relative;
@@ -137,7 +165,7 @@
     }
   </style>
 </head>
-<body data-mood="calm">
+<body data-mood="calm" data-auth-required="playlist">
 <header class="topbar">
   <div class="brand">📂 재생목록</div>
   <nav class="nav">
@@ -158,12 +186,22 @@
       <div class="title">내 재생목록</div>
       <div style="display:flex;gap:8px;align-items:center">
         <input id="plTitle"
-               placeholder="재생목록 이름"
-               style="padding:8px 10px;border-radius:999px;min-width:180px;
+              placeholder="재생목록 이름"
+              style="padding:8px 10px;border-radius:999px;min-width:180px;
                       background:var(--card);color:var(--text);
                       border:1px solid rgba(255,255,255,.16)"/>
-        <button id="createPL" class="btn primary">생성</button>
-      </div>
+
+        <!-- 🎨 재생목록 색 선택 -->
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <span class="sub" style="opacity:.8;">테마 색</span>
+          <input id="plColor"
+                type="color"
+                value="#22d3ee"
+                style="width:32px;height:32px;border-radius:50%;border:none;padding:0;cursor:pointer;background:transparent;"/>
+        </div>
+  <button id="createPL" class="btn primary">생성</button>
+</div>
+
     </div>
 
     <div id="myPlaylistsRow" class="my-playlists-row">
@@ -190,12 +228,14 @@
 <script src="./assets/api.js"></script>
 <script src="./assets/auth.js"></script>
 <script>
-  const BASE = 'http://localhost:3001';
+  // 페이지 로드되자마자 로그인 여부 확인
+  if (window.Auth) {
+    Auth.requireLogin('playlist');
+  }
 
   const $ = (s) => document.querySelector(s);
 
   function buildCoverThumbs(items) {
-    // 최대 4개까지 썸네일
     const thumbs = (items || [])
       .map(t => t.thumb)
       .filter(Boolean)
@@ -212,8 +252,11 @@
     row.innerHTML = '';
 
     try {
-      const { items } = await API.playlists();
-      if (!items || !items.length) {
+      const res = await API.playlists();
+      console.log('▶ /api/playlists 결과:', res); // 디버깅용
+      const items = res.items || [];
+
+      if (!items.length) {
         row.innerHTML =
           '<div class="sub" style="opacity:.7;padding:4px 8px;">아직 만든 재생목록이 없습니다. 오른쪽에서 새로 만들어 보세요.</div>';
         return;
@@ -222,6 +265,12 @@
       items.forEach(pl => {
         const card = document.createElement('div');
         card.className = 'pl-card';
+        card.dataset.id = pl.id; // 혹시 나중에 쓸 수 있으니 넣어둠
+
+        // 🔥 이 재생목록의 색 (없으면 기본)
+        const theme = pl.theme_color || '#22d3ee';
+        card.style.background = `linear-gradient(135deg, ${theme}25, #020617)`;
+        card.style.border = `1px solid ${theme}55`;
 
         const thumbs = buildCoverThumbs(pl.items);
         const cover = document.createElement('div');
@@ -234,7 +283,6 @@
             img.alt = 'thumb';
             cover.appendChild(img);
           });
-          // 썸네일이 1~3개일 때는 나머지를 그냥 빈 칸으로 둠
           while (cover.childElementCount < 4) {
             const div = document.createElement('div');
             div.style.background = '#111';
@@ -247,16 +295,21 @@
           cover.appendChild(fallback);
         }
 
-        // hover play
         const hover = document.createElement('div');
         hover.className = 'pl-play-hover';
         const playBtn = document.createElement('button');
         playBtn.className = 'pl-play-btn';
         playBtn.innerHTML = '▶';
+        // 버튼 배경도 재생목록 색으로
+        playBtn.style.background = theme;
         hover.appendChild(playBtn);
         cover.appendChild(hover);
 
-        // 메타
+        // 🔥 여기: 삭제 버튼 추가
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'pl-delete-btn';
+        deleteBtn.textContent = '✕';
+
         const metaTitle = document.createElement('div');
         metaTitle.className = 'pl-meta-title';
         metaTitle.textContent = pl.title;
@@ -270,13 +323,14 @@
         card.appendChild(cover);
         card.appendChild(metaTitle);
         card.appendChild(metaSub);
+        card.appendChild(deleteBtn);
 
         // 카드 클릭 → 상세 페이지
         card.addEventListener('click', () => {
           goPlaylistDetail(pl.id);
         });
 
-        // hover 재생 버튼 클릭 → 첫 곡 재생
+        // ▶ 플레이 버튼 (클릭 전파 막기)
         playBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           const first = (pl.items || [])[0];
@@ -288,10 +342,39 @@
           location.href = './player.html';
         });
 
+        // ❌ 삭제 버튼 (클릭 전파 막기 + API 호출)
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm(`"${pl.title}" 재생목록을 삭제할까요?`)) return;
+
+          try {
+            const res = await API.deletePlaylist(pl.id);
+            if (res.ok) {
+              card.remove();
+              if (!row.children.length) {
+                row.innerHTML =
+                  '<div class="sub" style="opacity:.7;padding:4px 8px;">아직 만든 재생목록이 없습니다. 오른쪽에서 새로 만들어 보세요.</div>';
+              }
+            } else {
+              alert('삭제 실패: ' + (res.error || '알 수 없는 오류'));
+            }
+          } catch (err) {
+            console.warn('▶ /api/playlists/:id DELETE 실패:', err);
+            alert('재생목록 삭제 중 오류가 발생했습니다.');
+          }
+        });
+
         row.appendChild(card);
       });
     } catch (e) {
-      console.warn(e);
+      console.warn('▶ /api/playlists 실패:', e);
+
+      if (e && (e.status === 401 || e.error === 'login required')) {
+        alert('로그인 후 이용해 주세요.');
+        location.href = './login.html?redirect=playlist';
+        return;
+      }
+
       row.innerHTML =
         '<div class="sub" style="color:#f66;">내 재생목록을 불러올 수 없습니다.</div>';
     }
@@ -302,8 +385,11 @@
     wrap.innerHTML = '';
 
     try {
-      const { items } = await API.publicPlaylists({ sort, limit: 50 });
-      if (!items || !items.length) {
+      const res = await API.publicPlaylists({ sort, limit: 50 });
+      console.log('▶ /api/playlists/public 결과:', res); // 디버깅용
+      const items = res.items || [];
+
+      if (!items.length) {
         wrap.innerHTML =
           '<div class="sub" style="opacity:.7;">공개 재생목록이 없습니다.</div>';
         return;
@@ -369,38 +455,41 @@
         wrap.appendChild(row);
       });
     } catch (e) {
-      console.warn(e);
+      console.warn('▶ /api/playlists/public 실패:', e);
       wrap.innerHTML =
-        '<div class="sub" style="color:#f66;">공유 재생목록을 불러올 수 없습니다.</div>';
+        '<div class="sub" style="color:#f66;">공개 재생목록을 불러올 수 없습니다.</div>';
     }
   }
 
   // 재생목록 생성
   $('#createPL').addEventListener('click', async () => {
-    const input = $('#plTitle');
-    const title = input.value.trim();
-    if (!title) {
-      alert('재생목록 이름을 입력하세요.');
-      input.focus();
-      return;
-    }
+  const input = $('#plTitle');
+  const colorInput = $('#plColor');
+  const title = input.value.trim();
+  if (!title) {
+    alert('재생목록 이름을 입력하세요.');
+    input.focus();
+    return;
+  }
 
-    try {
-      await API.createPlaylist({ title, isPublic: false });
-      input.value = '';
-      await renderMy();
-    } catch (e) {
-      console.warn(e);
+  const themeColor = (colorInput && colorInput.value) ? colorInput.value : '#22d3ee';
+
+  try {
+    const res = await API.createPlaylist({ title, isPublic: false, themeColor });
+    console.log('▶ /api/playlists POST 결과:', res);
+    input.value = '';
+    await renderMy();
+  } catch (e) {
+      console.warn('▶ /api/playlists POST 실패:', e);
       if (e && (e.status === 401 || e.error === 'login required')) {
         alert('로그인 후 이용해 주세요.');
-        location.href = './login.html';
+        location.href = './login.html?redirect=playlist';
       } else {
-        alert('재생목록 생성 실패');
+        alert('재생목록 생성 실패: ' + (e?.error ?? '알 수 없는 오류'));
       }
     }
   });
 
-  // 공유 정렬 버튼
   $('#sortRecent').addEventListener('click', () => renderPublic('recent'));
   $('#sortPopular').addEventListener('click', () => renderPublic('popular'));
 

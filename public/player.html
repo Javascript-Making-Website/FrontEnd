@@ -48,7 +48,10 @@
 
       <!-- 이 곡에 대한 감정 평가 영역 -->
       <div class="rating-block" style="margin-top:10px">
-        <div class="sub">이 곡을 듣고 난 지금 기분은?</div>
+        <div class="sub">
+          이 곡의 분위기를 골라주세요!
+          <span style="opacity:.75;font-size:0.9em;">(내 추천에 반영돼요)</span>
+        </div>
         <div class="moods" id="rateMoods" style="margin-top:8px"></div>
       </div>
     </section>
@@ -68,7 +71,12 @@
   <!-- 재생 종료 후 팝업 -->
   <div id="afterPopup" class="modal hidden">
     <div class="box">
-      <div class="title" style="margin-bottom:8px">이 곡을 듣고 난 지금 기분은?</div>
+      <div class="title" style="margin-bottom:8px">
+        이 곡을 듣고 난 지금 기분은?
+      </div>
+      <div class="sub" style="margin-bottom:8px">
+        선택한 감정이 앞으로 추천에 사용돼요.
+      </div>
       <div id="afterMoods" class="moods"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
         <a class="btn" href="./home.html">심리테스트 다시 하기</a>
@@ -91,6 +99,8 @@
     const initialMood   = urlParams.get('mood')   || 'calm';
     const initialGenre  = urlParams.get('genre')  || '';
     const initialNation = urlParams.get('nation') || '';
+    const initialSub    = urlParams.get('sub')    || '';
+    const initialTone   = urlParams.get('tone')   || '';
     const fromParam     = urlParams.get('from')   || '';
     const playlistIdParam = urlParams.get('playlistId') || '';
 
@@ -101,11 +111,21 @@
     let mode = 'recs';
     let ytPlayer = null;
     let currentTrack = null;
-    let currentParams = { mood: initialMood, genre: initialGenre, nation: initialNation };
+    let currentParams = {
+      mood: initialMood,
+      genre: initialGenre,
+      nation: initialNation,
+      sub: initialSub,
+      tone:   initialTone,
+    };
 
     // 큐(검색 결과나 재생목록 곡들)
     let queue = [];
     let queueIndex = -1;
+
+    // ★★★ 스킵 판단용 전역 상태
+    let currentTrackId = null;  // 현재 재생 중인 트랙 id
+    let playStartMs    = null;  // 이 트랙을 재생하기 시작한 시각(ms)
 
     // 로그인 필요한 동작 감싸기
     async function gate(fn, { silent = false } = {}) {
@@ -139,6 +159,30 @@
       return m ? m[1] : '';
     }
 
+    // ★★★ 5초 이하 스킵시 /api/skip 호출
+    async function sendSkipIfNeeded() {
+      // 아직 재생 중인 곡이 없거나, 시작 시간이 없으면 패스
+      if (!currentTrackId || playStartMs == null) return;
+
+      const listenedSec = (Date.now() - playStartMs) / 1000;
+      // 5초 초과면 "정상 청취"로 보고 스킵 X
+      if (listenedSec > 5) return;
+
+      try {
+        await fetch('http://localhost:3001/api/skip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            trackId: currentTrackId,
+            seconds: listenedSec,
+          }),
+        });
+      } catch (err) {
+        console.error('skip 기록 실패:', err);
+      }
+    }
+
     // ────────────────────────── YouTube Iframe API
     window.onYouTubeIframeAPIReady = function () {
       ytPlayer = new YT.Player('player', {
@@ -154,31 +198,39 @@
       });
     };
 
-    async function onReady(){
-      const p = new URLSearchParams(location.search);
-      const mood   = p.get('mood')   || 'calm';
-      const genre  = p.get('genre')  || '';
-      const nation = p.get('nation') || '';
-      const from   = p.get('from')   || '';
-      const pid    = p.get('playlistId') || '';
+    async function onReady() {
 
-      currentParams = { mood, genre, nation };
-      document.body.setAttribute('data-mood', mood);
+      currentParams = {
+        mood:   initialMood,
+        genre:  initialGenre,
+        nation: initialNation,
+        sub:    initialSub,
+        tone:   initialTone,
+      };
+
+      // body mood 업데이트
+      document.body.setAttribute('data-mood', currentParams.mood);
+
+      const from = fromParam;
+      const pid  = playlistIdParam;
 
       if (pid) {
         // 재생목록에서 진입
         mode = 'playlist';
         await initFromPlaylist(pid);
+
       } else if (from === 'search') {
         // 검색 결과에서 진입
         mode = 'search';
         await initFromSearch();
+
       } else {
         // 기본 추천 모드
         mode = 'recs';
         await refreshRecs();
       }
     }
+
 
     function onStateChange(e) {
       if (e.data === YT.PlayerState.ENDED) {
@@ -205,10 +257,10 @@
 
     // ────────────────────────── 추천 모드: 감정 기반 추천
     async function refreshRecs(){
-      const { mood, genre, nation } = currentParams;
+      const { mood, genre, nation, sub, tone } = currentParams;
       let items = [];
       try{
-        const r = await API.recs({ mood, genre, nation });
+        const r = await API.recs({ mood, genre, nation, sub, tone });
         items = r.items || [];
       }catch{
         items = API.list();
@@ -343,8 +395,17 @@
 
     // ────────────────────────── 현재 곡 설정
     function setNow(t) {
-      currentTrack = t;
       if (!t) return;
+
+      // ★★★ 이전 곡이 있고, 다른 곡으로 바꾸는 경우만 스킵 체크
+      if (currentTrack && currentTrack.id && currentTrack.id !== t.id) {
+        // fire-and-forget (await 안 해도 됨)
+        sendSkipIfNeeded();
+      }
+
+      currentTrack = t;
+      currentTrackId = t.id || null;
+      playStartMs = Date.now();  // 새 곡 재생 시작 시각 기록
 
       const vid = getYouTubeId(t);
       if (ytPlayer && ytPlayer.loadVideoById && vid) ytPlayer.loadVideoById(vid);
@@ -428,11 +489,13 @@
     });
 
     $('#moreRecsBtn').onclick = ()=> {
-      const { mood, genre, nation } = currentParams;
+      const { mood, genre, nation, tone, sub } = currentParams;
       const sp = new URLSearchParams();
-      if (mood) sp.set('mood', mood);
+      if (mood)  sp.set('mood',  mood);
       if (genre) sp.set('genre', genre);
-      if (nation) sp.set('nation', nation);
+      if (nation)sp.set('nation',nation);
+      if (tone)  sp.set('tone',  tone);  
+      if (sub)   sp.set('sub',   sub);  
       location.href = `./search.html?${sp.toString()}`;
     };
   </script>

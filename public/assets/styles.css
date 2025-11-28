@@ -17,7 +17,6 @@
   --ring:rgba(34,211,238,.5);
 }
 
-
 /* mood themes */
 body[data-mood="happy"]{
   --bg:#0b1a10; --panel:#0f2316; --text:#f2fce2; --accent:#84cc16; --card:#0a1a10;
@@ -40,9 +39,28 @@ body[data-mood="energetic"]{
 html,body{ height:100% }
 body{
   margin:0;
-  background:var(--bg);
+  background-color:var(--bg);
   color:var(--text);
-  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    "Segoe UI Emoji",
+    "Apple Color Emoji",
+    "Noto Color Emoji",
+    sans-serif;
+
+  /* ✨ 감정 바뀔 때 부드럽게 전환되는 부분 */
+  transition:
+    background-color 0.9s ease,
+    color 0.9s ease;
 }
 a{ color:inherit; text-decoration:none }
 img{ display:block; max-width:100% }
@@ -54,6 +72,8 @@ img{ display:block; max-width:100% }
   padding:12px 16px;
   background:var(--panel);
   border-bottom:1px solid rgba(255,255,255,.06);
+
+  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
 }
 .brand{ font-weight:800; letter-spacing:.2px; }
 .nav{ display:flex; gap:8px; align-items:center; }
@@ -63,7 +83,13 @@ img{ display:block; max-width:100% }
   padding:8px 12px; border-radius:10px;
   border:1px solid rgba(255,255,255,.08);
   background:var(--card); color:var(--text);
-  cursor:pointer; transition:outline-color .15s ease, transform .04s ease;
+  cursor:pointer;
+  transition:
+    outline-color .15s ease,
+    transform .04s ease,
+    background-color .25s ease,
+    border-color .25s ease,
+    color .25s ease;
 }
 .btn:hover{ outline:2px solid var(--ring) }
 .btn:active{ transform:translateY(1px) }
@@ -85,6 +111,8 @@ img{ display:block; max-width:100% }
   border:1px solid rgba(255,255,255,.06);
   border-radius:14px;
   padding:12px;
+
+  transition: background-color 0.35s ease, border-color 0.35s ease;
 }
 
 .title{ font-weight:800 }
@@ -116,6 +144,12 @@ img{ display:block; max-width:100% }
   padding:8px 10px; border-radius:999px; cursor:pointer;
   background:var(--card);
   border:1px solid rgba(255,255,255,.08);
+
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
 }
 .chip:hover{ outline:2px solid var(--ring) }
 .chip.active{ background:var(--accent); color:#00110c; font-weight:700; border:none }
@@ -131,6 +165,8 @@ img{ display:block; max-width:100% }
   gap:10px; align-items:center;
   padding:8px; border-radius:10px; cursor:pointer;
   background:var(--card); border:1px solid transparent;
+
+  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 .item:hover{ border-color:var(--accent) }
 .item img{ width:90px; height:50px; border-radius:8px; object-fit:cover }
@@ -149,7 +185,7 @@ img{ display:block; max-width:100% }
 }
 
 /* ==========================================================================
-   Multi-Step Quiz (home.html)
+   Multi-Step Quiz (공통 step 스타일)
    ========================================================================== */
 .step{ margin-top:14px }
 .step h2{ margin:6px 0 10px; font-size:1.05rem }
@@ -172,12 +208,27 @@ img{ display:block; max-width:100% }
 }
 .choice:hover{ outline:2px solid var(--ring) }
 
-.progress{ display:flex; gap:6px; margin:8px 0 0 }
-.progress .dot{
-  width:8px; height:8px; border-radius:999px;
-  background:rgba(255,255,255,.15);
+/* 감정 테스트용 단계 도트 애니메이션 */
+.dots .dot{
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.18);
+  opacity:0.5;
+  transform:scale(1);
+  transition:
+    background-color .30s ease,
+    transform .25s ease,
+    opacity .25s ease,
+    box-shadow .25s ease;
 }
-.progress .dot.on{ background:var(--accent) }
+
+.dots .dot.active{
+  background:var(--accent);
+  opacity:1;
+  transform:scale(1.6);                /* 선택된 점 살짝 크게 */
+  box-shadow:0 0 8px rgba(0,0,0,.7);   /* 은은한 발광 느낌 */
+}
 
 .resultbox{
   padding:12px; border:1px dashed rgba(255,255,255,.25);
@@ -191,8 +242,9 @@ img{ display:block; max-width:100% }
   text-align:center; padding:10px; color:var(--muted);
   border-top:1px solid rgba(255,255,255,.06);
   background:var(--panel);
-}
 
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease;
+}
 
 /* 감상 페이지: 이 곡 평가용 감정 버튼 */
 .rating-block .sub {
@@ -207,4 +259,173 @@ img{ display:block; max-width:100% }
 
 .chip.rate-chip:hover {
   background: #4f46e5;
+}
+
+/* ==========================
+   home.html 전용 스타일
+   ========================== */
+
+/* home 전체 레이아웃: 세로를 꽉 채우고 가운데 배치 */
+.home-main{
+  min-height:calc(100vh - 120px); /* 상단 헤더 감안 */
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:32px 16px 48px;
+}
+
+/* 상단 히어로 타이틀 (더 크게) */
+.hero-title{
+  text-align:center;
+  font-size:2.1rem;      /* 기존 1.8 → 2.1 */
+  font-weight:800;
+  margin:24px 0 28px;
+}
+
+/* 감정 테스트 카드(wizard)를 크게 보이게 */
+#wizard{
+  width:100%;
+  max-width:900px;
+  background:var(--panel);
+  border-radius:20px;
+  padding:32px 40px 40px;          /* 패널 기본 padding보다 넉넉하게 */
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 24px 60px rgba(15,23,42,.8);
+}
+
+/* STEP1: 감정 선택 화면을 가운데 크게 */
+#step1{
+  text-align:center;
+}
+
+#step1 .step-title{
+  font-size:1.4rem;
+  margin:10px 0 18px;
+}
+
+#step1 .choices{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:12px;
+}
+
+#step1 .choice.big{
+  min-width:140px;
+  padding:14px 22px;
+  font-size:1.05rem;
+}
+
+/* wizard 상단: 이전 버튼 + 점 */
+.wizard-header{
+  position: relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;   /* 가운데 기준으로 맞추기 */
+  margin-bottom:20px;
+}
+
+/* 점들은 정확히 가운데 정렬 */
+.wizard-header .dots{
+  display:flex;
+  gap:6px;
+  justify-content:center;
+}
+
+/* 왼쪽 위에 살짝 고정되는 이전 버튼 */
+.btn.ghost{
+  background:transparent;
+  border:none;
+  padding-left:0;
+  padding-right:8px;
+  font-size:0.9rem;
+}
+
+/* 버튼을 헤더의 왼쪽 중앙에 고정 */
+#wizard #backBtn.btn.ghost{
+  position:absolute;
+  left:0;
+  top:50%;
+  transform:translateY(-50%);
+}
+
+.btn.ghost:hover{
+  outline:0;
+  text-decoration:underline;
+}
+
+/* 모든 step 공통: 가운데 정렬 */
+#wizard .step{
+  text-align:center;
+}
+
+/* 각 스텝 제목 크게 (wizard 한정) */
+#wizard .step h2{
+  font-size:1.5rem;       /* 기존 1.3 → 1.5 */
+  margin:12px 0 22px;
+}
+
+/* 기본 choices: 중앙 배치 (wizard 한정) */
+#wizard .choices{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:12px;
+}
+
+/* grid 타입도 플렉스처럼 가운데 */
+#wizard .choices.grid{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+/* STEP1만 살짝 더 크게 (이미 위에서 정의했지만 한 번 더 명시) */
+#step1 .choice.big{
+  min-width:140px;
+  padding:14px 22px;
+  font-size:1.05rem;
+}
+
+/* STEP2 힌트 텍스트도 중앙 */
+#step2Hint{
+  text-align:center;
+  margin-top:6px;
+}
+
+/* wizard 안의 선택 버튼은 좀 더 크고 둥글게 */
+#wizard .choice{
+  appearance:none;
+  border:1px solid rgba(255,255,255,.08);
+  background:var(--card); color:var(--text);
+  border-radius:14px;
+  padding:14px 20px;        /* 기본 choice보다 넉넉하게 */
+  font-size:1.05rem;
+  text-align:left;
+  cursor:pointer;
+}
+
+/* 감정/분위기/장르 이모티콘 트레일 (크게 + 공간 확보) */
+.emotion-trail{
+  margin-top:60px;
+  display:flex;
+  justify-content:center;
+  gap:16px;
+  font-size:82px;           /* 기존 32 → 40 */
+  min-height:98px;          /* 아직 선택 안 했을 때도 자리 확보 */
+}
+
+.emotion-trail .trail-icon{
+  filter:drop-shadow(0 0 6px rgba(0,0,0,.6));
+  transition: transform .15s ease, opacity .2s ease;
+}
+
+
+/* 전체 톤 전환을 더 부드럽게 만들기 */
+.panel, .choice, .chip, .item, .modal, .topbar{
+  transition:
+    background-color 0.9s ease,
+    border-color 0.9s ease,
+    color 0.9s ease;
 }

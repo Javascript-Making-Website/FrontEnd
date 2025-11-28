@@ -15,7 +15,7 @@ const API = (() => {
     { key: 'sad',       label: '슬픔'   },
     { key: 'calm',      label: '차분'   },
     { key: 'angry',     label: '분노'   },
-    { key: 'energetic', label: '에너지' },
+    { key: 'energetic', label: '열정' },
   ];
 
   // ── 로컬 더미(폴백용) ──────────────────────────────────────────────────────
@@ -167,11 +167,11 @@ const API = (() => {
     catch { return { user: null }; }
   }
 
-  async function login(name) {
+  async function login({ username, password }) {
     return fx(`${BASE}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ username, password })
     });
   }
 
@@ -198,12 +198,14 @@ const API = (() => {
     }
   }
 
-  async function recs({ mood, genre, nation } = {}) {
+  async function recs({ mood, genre, nation, sub, tone } = {}) {
     try {
       const u = new URL(`${BASE}/api/recs`);
       if (mood) u.searchParams.set('mood', mood);
       if (genre) u.searchParams.set('genre', genre);
       if (nation) u.searchParams.set('nation', nation);
+      if (sub)    u.searchParams.set('sub', sub);
+      if (tone)   u.searchParams.set('tone',   tone);
       return await fx(u);
     } catch {
       // 폴백: 로컬 더미에서 mood 위주로 정렬
@@ -250,17 +252,38 @@ const API = (() => {
   }
 
   // ✅ 재생목록 생성
-  async function createPlaylist({ title, isPublic }) {
+  async function createPlaylist({ title, isPublic, themeColor }) {
     try {
       return await fx(`${BASE}/api/playlists`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, isPublic })
+        body: JSON.stringify({
+          title,
+          isPublic,
+          // 색을 안 넘겼으면 기본색 사용
+          themeColor: themeColor || '#22d3ee'
+        })
       });
     } catch {
+      // 서버 죽었을 때라도 UI 안터지게 하는 기존 폴백 유지
       return { ok: true, id: 0, fallback: true };
     }
   }
+
+
+  // ✅ 재생목록 삭제
+  async function deletePlaylist(id) {
+    try {
+      return await fx(`${BASE}/api/playlists/${id}`, {
+        method: 'DELETE'
+      });
+    } catch {
+      // 폴백: 로컬 재생목록 싹 비우는 정도만
+      Playlist.set([]);
+      return { ok: true, fallback: true };
+    }
+  }
+
 
   // ✅ 재생목록에 곡 추가
   async function addToPlaylist({ playlistId, trackId, position = 0 }) {
@@ -387,7 +410,7 @@ const API = (() => {
     list, searchLocal, Playlist, Ratings,
     me, login, logout,
     search, recs, rate, watch,
-    playlists, createPlaylist, addToPlaylist, removeFromPlaylist,
+    playlists, createPlaylist, addToPlaylist, removeFromPlaylist, deletePlaylist,
     playlistDetail, togglePlaylistLike,
     publicPlaylists,
   };

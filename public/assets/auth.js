@@ -24,7 +24,6 @@
 
   function logout() {
     localStorage.removeItem(STORAGE_KEY);
-    // 현재 페이지에서만 처리할 수도 있지만, 홈으로 돌려보내는게 깔끔
     location.href = './home.html';
   }
 
@@ -40,10 +39,9 @@
     const userBadge = document.getElementById('userBadge');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    if (!loginLink && !userBadge && !logoutBtn) return; // 이 페이지에 없을 수도 있음
+    if (!loginLink && !userBadge && !logoutBtn) return;
 
     if (user && user.loggedIn) {
-      // 로그인 상태
       if (loginLink) loginLink.classList.add('hidden');
       if (userBadge) {
         userBadge.textContent = user.name + ' 님';
@@ -51,7 +49,6 @@
       }
       if (logoutBtn) logoutBtn.classList.remove('hidden');
     } else {
-      // 비로그인 상태
       if (loginLink) loginLink.classList.remove('hidden');
       if (userBadge) userBadge.classList.add('hidden');
       if (logoutBtn) logoutBtn.classList.add('hidden');
@@ -65,56 +62,40 @@
     }
   }
 
-  // 로그인 안 되어 있으면 로그인 페이지로 튕기기
-  function requireLogin() {
-    if (!isLoggedIn()) {
-      alert('로그인 후 이용할 수 있는 메뉴입니다.');
-      location.href = './login.html';
-    }
-  }
+  // 로그인 안 되어 있으면 로그인 페이지로 튕기기 + redirect 지원
+  function requireLogin(redirectPage) {
+    if (isLoggedIn()) return;
 
-  // login.html 전용 세팅
-  function setupLoginPage() {
-    const nameEl = document.getElementById('name');
-    const goBtn = document.getElementById('go');
-    if (!nameEl || !goBtn) return; // 로그인 페이지가 아니면 패스
-
-    async function doLogin() {
-      const v = nameEl.value.trim();
-      if (!v) {
-        alert('닉네임을 입력하세요.');
-        nameEl.focus();
-        return;
-      }
-
-      // 여기서는 서버 호출 없이 바로 로컬 로그인 처리
-      saveUser(v);
-      alert(v + '님, 환영합니다!');
-      location.href = './home.html';
+    let msg = '로그인 후 이용할 수 있는 메뉴입니다.';
+    if (redirectPage === 'playlist') {
+      msg = '내 재생목록은 로그인이 필요한 서비스입니다.\n로그인 페이지로 이동합니다.';
     }
 
-    goBtn.addEventListener('click', doLogin);
-    nameEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') doLogin();
-    });
+    alert(msg);
+
+    const qs = redirectPage
+      ? '?redirect=' + encodeURIComponent(redirectPage)
+      : '';
+    location.href = './login.html' + qs;
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    setupLoginPage();
     updateAuthUI();
 
-    // 이 페이지가 보호 대상이면 body에 data-auth-required="true" 달아놓는 방식
+    // 이 페이지가 보호 대상이면 body에 data-auth-required="playlist" 처럼 달기
     const body = document.body;
-    if (body && body.dataset.authRequired === 'true') {
-      requireLogin();
+    if (body && body.dataset.authRequired) {
+      requireLogin(body.dataset.authRequired);
     }
   });
 
-  // 다른 스크립트에서 필요하면 쓸 수 있게 export
+  // 다른 스크립트에서 쓰기 위해 export
   window.Auth = {
     getUser,
+    saveUser,
     isLoggedIn,
     requireLogin,
-    logout
+    logout,
+    updateAuthUI
   };
 })();

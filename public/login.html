@@ -44,6 +44,10 @@
     const pwEl  = document.getElementById('password');
     const goBtn = document.getElementById('go');
 
+    // 🔹 URL 쿼리에서 redirect 값 읽기 (예: ?redirect=playlist)
+    const params   = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect');
+
     async function doLogin() {
       const username = idEl.value.trim();
       const password = pwEl.value;
@@ -52,8 +56,24 @@
       if (!password) { alert('비밀번호를 입력하세요.'); pwEl.focus(); return; }
 
       try {
-        await API.login({ username, password });
-        location.href = './home.html';
+        // 서버 로그인
+        const res = await API.login({ username, password });
+
+        // 서버가 name / user.name 등을 주면 사용, 없으면 아이디 사용
+        const displayName =
+          (res && (res.user?.name || res.name)) || username;
+
+        // 🔹 로컬 로그인 상태 저장 (네비게이션 뱃지 등용)
+        if (window.Auth && Auth.saveUser) {
+          Auth.saveUser(displayName);
+        }
+
+        // 🔹 redirect 값에 따라 이동
+        if (redirect === 'playlist') {
+          location.href = './playlist.html';
+        } else {
+          location.href = './home.html';
+        }
       } catch (e) {
         alert('로그인 실패: ' + (e?.error ?? '알 수 없는 오류'));
       }
@@ -69,3 +89,5 @@
   </script>
 </body>
 </html>
+
+

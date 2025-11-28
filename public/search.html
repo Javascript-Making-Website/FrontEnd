@@ -5,6 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Emotion Playlist · Search</title>
   <link rel="stylesheet" href="./assets/styles.css" />
+
+  <style>
+    /* 검색 결과 줄 오른쪽 액션 영역 */
+    .track-actions {
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-end;
+    }
+    .track-actions .btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    /* 재생목록 선택 모달 */
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .6);
+      z-index: 50;
+    }
+    .modal-box {
+      max-width: 360px;
+      width: 100%;
+      padding: 16px;
+    }
+    .modal-list {
+      max-height: 260px;
+      overflow-y: auto;
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .modal-list .btn {
+      width: 100%;
+      justify-content: flex-start;
+      font-size: 13px;
+      padding: 6px 10px;
+    }
+    .modal-hint {
+      font-size: 11px;
+      opacity: .7;
+      margin-top: 4px;
+    }
+  </style>
 </head>
 <body data-mood="calm">
   <header class="topbar">
@@ -36,165 +87,393 @@
 
   <footer class="foot">검색 결과를 클릭하면 감상 페이지로 이동합니다.</footer>
 
+  <!-- 재생목록 선택 모달 -->
+  <div id="plPicker" class="modal hidden">
+    <div class="panel modal-box">
+      <div class="title" style="margin-bottom:4px;">재생목록에 추가</div>
+      <div id="plPickerHint" class="modal-hint"></div>
+      <div id="plPickerList" class="modal-list"></div>
+      <div style="text-align:right;margin-top:10px;">
+        <button id="plPickerClose" class="btn" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 전역 API 먼저 -->
   <script src="./assets/api.js"></script>
   <!-- 헤더 로그인 상태 동기화 (API 뒤에 로드) -->
   <script src="./assets/auth.js"></script>
 
   <script>
-    // ──────────────────────────────────────
-    // 쿼리스트링에서 초기 상태 가져오기
-    // ──────────────────────────────────────
-    const sp = new URLSearchParams(location.search);
-    const initialMood   = sp.get('mood')   || '';
-    const initialGenre  = sp.get('genre')  || '';
-    const initialNation = sp.get('nation') || '';
-    if (initialMood) document.body.setAttribute('data-mood', initialMood);
+  const BASE = 'http://localhost:3001';
 
-    // 페이지네이션 + 최근 검색 결과 저장용
-    let currentQuery   = '';
-    let nextPageToken  = null;
-    let lastSearchList = [];   // ★ player로 넘길 리스트
+  // ──────────────────────────────────────
+  // 쿼리스트링에서 초기 상태 가져오기
+  // ──────────────────────────────────────
+  const sp = new URLSearchParams(location.search);
+  const initialMood   = sp.get('mood')   || '';
+  const initialGenre  = sp.get('genre')  || '';
+  const initialNation = sp.get('nation') || '';
+  const targetPlaylistIdFromUrl = sp.get('addToPlaylist') || null; // ← playlist_view에서 넘어온 대상 재생목록
 
-    // ──────────────────────────────────────
-    // 아이템 렌더링
-    // ──────────────────────────────────────
-    function itemEl(track){
-      const el = document.createElement('div');
-      el.className = 'item';
-      const thumb = track.thumb || '';
-      el.innerHTML = `
-        <img src="${thumb}" alt="thumb" />
-        <div>
-          <div class="t">${API.cleanTitle(track.title)}</div>
-          <div class="s">${track.artist ?? ''} · <span class="badge">${track.source ?? ''}</span></div>
-        </div>
-      `;
+  let currentMood = initialMood;
 
-      // ★ 클릭 시 player.html로 이동하도록 수정
-      el.onclick = () => {
-        // 방금 검색 결과 전체를 localStorage에 저장
-        try {
-          localStorage.setItem('lastSearchList', JSON.stringify(lastSearchList));
-          localStorage.setItem('lastSearchContext', JSON.stringify({
-            mood: initialMood,
-            genre: initialGenre,
-            nation: initialNation,
-            q: currentQuery,
-          }));
-        } catch (e) {
-          console.warn('failed to save lastSearchList', e);
-        }
+  if (initialMood) document.body.setAttribute('data-mood', initialMood);
 
-        const params = new URLSearchParams();
-        if (initialMood)   params.set('mood',   initialMood);
-        if (initialGenre)  params.set('genre',  initialGenre);
-        if (initialNation) params.set('nation', initialNation);
-        params.set('from', 'search');
-        params.set('id', track.id);
+  // 페이지네이션 + 최근 검색 결과 저장용
+  let currentQuery   = '';
+  let nextPageToken  = null;
+  let lastSearchList = [];   // ★ player로 넘길 리스트
+  let isLoading      = false; // ★ 중복 로딩 방지
 
-        window.location.href = `./player.html?${params.toString()}`;
-      };
+  // 재생목록 추가용 상태
+  let trackToAdd = null;
 
-      return el;
-    }
-
-    function render(list, { append = false } = {}) {
-      const holder = document.getElementById('resultList');
-      if (!append) {
-        holder.innerHTML = '';
-      }
-      list.forEach(t => holder.appendChild(itemEl(t)));
-    }
-
-    function setLoadMoreVisible(visible) {
-      const btn = document.getElementById('loadMoreBtn');
-      if (!btn) return;
-      if (visible) btn.classList.remove('hidden');
-      else btn.classList.add('hidden');
-    }
-
-    // ──────────────────────────────────────
-    // 감정 칩 렌더링 (UI만, 검색은 그대로)
-    // ──────────────────────────────────────
-    (function renderMoodChips(){
-      const holder = document.getElementById('moodChips');
-      holder.innerHTML = '';
-      API.MOODS.forEach(m => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'chip';
-        b.textContent = m.label;
-        b.onclick = () => {
-          document.body.setAttribute('data-mood', m.key);
-        };
-        holder.appendChild(b);
-      });
-    })();
-
-    // ──────────────────────────────────────
-    // 실제 /api/search 호출
-    // ──────────────────────────────────────
-    async function fetchAndRender({ append = false } = {}) {
-      const params = {
-        q: currentQuery,
+  // ──────────────────────────────────────
+  // player.html로 이동하는 공통 함수
+  // ──────────────────────────────────────
+  function goPlay(track) {
+    try {
+      localStorage.setItem('lastSearchList', JSON.stringify(lastSearchList));
+      localStorage.setItem('lastSearchContext', JSON.stringify({
         mood: initialMood,
         genre: initialGenre,
         nation: initialNation,
-      };
-
-      if (append && nextPageToken) {
-        params.pageToken = nextPageToken;
-      }
-
-      try {
-        const r = await API.search(params);
-        const items = r.items || [];
-
-        // ★최근 검색 리스트 갱신
-        if (append) {
-          lastSearchList = lastSearchList.concat(items);
-        } else {
-          lastSearchList = items.slice();
-        }
-
-        render(items, { append });
-        nextPageToken = r.nextPageToken || null;
-        setLoadMoreVisible(!!nextPageToken);
-      } catch (err) {
-        console.warn('search failed, fallback to local', err);
-
-        if (!append) {
-          const items = API.list();
-          lastSearchList = items.slice();
-          render(items, { append: false });
-          setLoadMoreVisible(false);
-        }
-      }
+        q: currentQuery,
+      }));
+    } catch (e) {
+      console.warn('failed to save lastSearchList', e);
     }
 
-    // ──────────────────────────────────────
-    // 이벤트 핸들러들
-    // ──────────────────────────────────────
-    document.getElementById('searchForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const q = document.getElementById('searchInput').value.trim();
-      currentQuery = q;
-      nextPageToken = null;
-      await fetchAndRender({ append: false });
+    const params = new URLSearchParams();
+    if (initialMood)   params.set('mood',   initialMood);
+    if (initialGenre)  params.set('genre',  initialGenre);
+    if (initialNation) params.set('nation', initialNation);
+    params.set('from', 'search');
+    params.set('id', track.id);
+
+    window.location.href = `./player.html?${params.toString()}`;
+  }
+
+  // ──────────────────────────────────────
+  // 재생목록 선택 모달 관련
+  // ──────────────────────────────────────
+  const plModal       = document.getElementById('plPicker');
+  const plModalList   = document.getElementById('plPickerList');
+  const plModalHint   = document.getElementById('plPickerHint');
+  const plModalClose  = document.getElementById('plPickerClose');
+
+  function closePlaylistPicker() {
+    trackToAdd = null;
+    plModal.classList.add('hidden');
+  }
+
+  plModalClose.addEventListener('click', closePlaylistPicker);
+  // 바깥 영역 클릭 시 닫기
+  plModal.addEventListener('click', (e) => {
+    if (e.target === plModal) closePlaylistPicker();
+  });
+
+  async function openPlaylistPicker(track) {
+    trackToAdd = track;
+    plModal.classList.remove('hidden');
+    plModalList.innerHTML = '<div class="sub">재생목록을 불러오는 중...</div>';
+
+    if (targetPlaylistIdFromUrl) {
+      plModalHint.textContent = `현재 편집 중인 재생목록 ID: ${targetPlaylistIdFromUrl}`;
+    } else {
+      plModalHint.textContent = '추가할 재생목록을 선택하세요.';
+    }
+
+    try {
+      const res = await fetch(`${BASE}/api/playlists`, {
+        credentials: 'include',
+      });
+      if (res.status === 401) {
+        alert('로그인 후 재생목록에 곡을 추가할 수 있습니다.');
+        location.href = './login.html';
+        return;
+      }
+      const data = await res.json();
+      let lists = data.items || [];
+
+      if (!lists.length) {
+        plModalList.innerHTML = '<div class="sub">아직 만든 재생목록이 없습니다.</div>';
+        return;
+      }
+
+      // URL에서 넘어온 재생목록이 있으면 맨 위로 올리기
+      if (targetPlaylistIdFromUrl) {
+        const idStr = String(targetPlaylistIdFromUrl);
+        lists = lists.slice().sort((a, b) => {
+          const aKey = String(a.id) === idStr ? -1 : 0;
+          const bKey = String(b.id) === idStr ? -1 : 0;
+          return aKey - bKey;
+        });
+      }
+
+      plModalList.innerHTML = '';
+      lists.forEach(pl => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn';
+
+        const isTarget =
+          targetPlaylistIdFromUrl &&
+          String(pl.id) === String(targetPlaylistIdFromUrl);
+
+        btn.innerHTML = `
+          <span style="flex:1;">${pl.title} · 트랙 ${(pl.items || []).length}개</span>
+          <span style="font-size:11px;opacity:.7;">${pl.is_public ? '공개' : '비공개'}</span>
+        `;
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '6px';
+
+        if (isTarget) {
+          btn.style.border = '1px solid var(--accent, #1ed760)';
+        }
+
+        btn.addEventListener('click', async () => {
+          try {
+            const resAdd = await fetch(`${BASE}/api/playlist/items`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                playlistId: pl.id,
+                trackId: trackToAdd.id,
+                position: 0,
+              }),
+            });
+
+            const dataAdd = await resAdd.json().catch(() => ({}));
+
+            if (resAdd.status === 401) {
+              alert('로그인 후 재생목록에 곡을 추가할 수 있습니다.');
+              location.href = './login.html';
+              return;
+            }
+
+            if (!resAdd.ok) {
+              alert('추가 실패: ' + (dataAdd.error || `${resAdd.status}`));
+              return;
+            }
+
+            alert(`"${pl.title}" 재생목록에 곡을 추가했습니다.`);
+            closePlaylistPicker();
+          } catch (e) {
+            console.error(e);
+            alert('재생목록에 추가하는 중 오류가 발생했습니다.');
+          }
+        });
+
+        plModalList.appendChild(btn);
+      });
+    } catch (e) {
+      console.error(e);
+      plModalList.innerHTML =
+        '<div class="sub" style="color:#f66;">재생목록을 불러오지 못했습니다.</div>';
+    }
+  }
+
+  // ──────────────────────────────────────
+  // 아이템 렌더링
+  // ──────────────────────────────────────
+  function itemEl(track) {
+    const el = document.createElement('div');
+    el.className = 'item';
+    const thumb = track.thumb || '';
+
+    el.innerHTML = `
+      <img src="${thumb}" alt="thumb" />
+      <div style="min-width:0;">
+        <div class="t">${API.cleanTitle(track.title)}</div>
+        <div class="s">
+          ${track.artist ?? ''} ·
+          <span class="badge">${track.source ?? ''}</span>
+        </div>
+      </div>
+      <div class="track-actions">
+        <button type="button" class="btn" data-role="play">재생</button>
+        <button type="button" class="btn" data-role="add">⋯</button>
+      </div>
+    `;
+
+    // 전체 줄 클릭 -> 플레이어
+    el.addEventListener('click', () => {
+      goPlay(track);
     });
 
-    document.getElementById('loadMoreBtn').addEventListener('click', async () => {
-      if (!nextPageToken) return;
+    // 개별 버튼 핸들러 (부모 클릭 막기)
+    const playBtn = el.querySelector('[data-role="play"]');
+    const addBtn  = el.querySelector('[data-role="add"]');
+
+    if (playBtn) {
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        goPlay(track);
+      });
+    }
+
+    if (addBtn) {
+      addBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openPlaylistPicker(track);
+      });
+    }
+
+    return el;
+  }
+
+  function render(list, { append = false } = {}) {
+    const holder = document.getElementById('resultList');
+    if (!append) {
+      holder.innerHTML = '';
+    }
+    list.forEach(t => holder.appendChild(itemEl(t)));
+  }
+
+  function setLoadMoreVisible(visible) {
+    const btn = document.getElementById('loadMoreBtn');
+    if (!btn) return;
+    if (visible) btn.classList.remove('hidden');
+    else btn.classList.add('hidden');
+  }
+
+  // ──────────────────────────────────────
+  // 감정 칩 렌더링 (UI만, 검색은 그대로)
+  // ──────────────────────────────────────
+  (function renderMoodChips() {
+    const holder = document.getElementById('moodChips');
+    holder.innerHTML = '';
+    API.MOODS.forEach(m => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = m.label;
+       b.onclick = async () => {
+      // 1) 배경 색 / 테마 변경
+      document.body.setAttribute('data-mood', m.key);
+
+      // 2) 현재 선택된 감정 상태 갱신
+      currentMood = m.key;
+
+      // 3) 새 검색 준비
+      nextPageToken = null;                 // 페이지네이션 초기화
+      // 검색어도 같이 리셋하고 싶으면:
+      // currentQuery = '';
+      // document.getElementById('searchInput').value = '';
+
+      // 4) 이 감정으로 다시 검색
+      await fetchAndRender({ append: false });
+    };
+      holder.appendChild(b);
+    });
+  })();
+
+  // ──────────────────────────────────────
+  // 실제 /api/search 호출
+  // ──────────────────────────────────────
+  async function fetchAndRender({ append = false } = {}) {
+    if (isLoading) return;          // ★ 중복 호출 방지
+    isLoading = true;
+    if (append) setLoadMoreVisible(false); // 로딩 중엔 버튼 숨김
+
+    const params = {
+      q: currentQuery,
+      mood: currentMood, 
+      genre: initialGenre,
+      nation: initialNation,
+    };
+
+    if (append && nextPageToken) {
+      params.pageToken = nextPageToken;
+    }
+
+    try {
+      const r = await API.search(params);
+      const items = r.items || [];
+
+      // ★최근 검색 리스트 갱신
+      if (append) {
+        lastSearchList = lastSearchList.concat(items);
+      } else {
+        lastSearchList = items.slice();
+      }
+
+      render(items, { append });
+      nextPageToken = r.nextPageToken || null;
+      setLoadMoreVisible(!!nextPageToken);
+    } catch (err) {
+      console.warn('search failed, fallback to local', err);
+
+      if (!append) {
+        const items = API.list();
+        lastSearchList = items.slice();
+        render(items, { append: false });
+        nextPageToken = null;
+        setLoadMoreVisible(false);
+      }
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  // ──────────────────────────────────────
+  // 무한 스크롤 체크 함수
+  // ──────────────────────────────────────
+  async function checkInfiniteScroll() {
+    if (!nextPageToken || isLoading) return;
+
+    const listEl = document.getElementById('resultList');
+
+    // 1) 리스트 자체에 스크롤이 있는 경우
+    let needMore = false;
+    if (listEl && listEl.scrollHeight > listEl.clientHeight + 10) {
+      const bottom = listEl.scrollTop + listEl.clientHeight;
+      const limit  = listEl.scrollHeight - 300; // 300px 남았을 때 로딩
+      if (bottom >= limit) needMore = true;
+    }
+
+    // 2) 윈도우 전체 스크롤인 경우
+    const root = document.documentElement;
+    const winBottom = root.scrollTop + root.clientHeight;
+    const winLimit  = root.scrollHeight - 300;
+    if (winBottom >= winLimit) needMore = true;
+
+    if (needMore) {
       await fetchAndRender({ append: true });
-    });
+    }
+  }
 
-    // 초기 진입 시: mood/genre/nation만으로 첫 페이지 자동 로드
-    (async () => {
-      currentQuery = '';
-      nextPageToken = null;
-      await fetchAndRender({ append: false });
-    })();
-  </script>
+  // ──────────────────────────────────────
+  // 이벤트 핸들러들
+  // ──────────────────────────────────────
+  document.getElementById('searchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = document.getElementById('searchInput').value.trim();
+    currentQuery = q;
+    nextPageToken = null;
+    await fetchAndRender({ append: false });
+  });
+
+  document.getElementById('loadMoreBtn').addEventListener('click', async () => {
+    if (!nextPageToken) return;
+    await fetchAndRender({ append: true });
+  });
+
+  // ★ 무한 스크롤 이벤트 등록
+  window.addEventListener('scroll', checkInfiniteScroll);
+  document.getElementById('resultList').addEventListener('scroll', checkInfiniteScroll);
+
+  // 초기 진입 시: mood/genre/nation만으로 첫 페이지 자동 로드
+  (async () => {
+    currentQuery = '';
+    nextPageToken = null;
+    await fetchAndRender({ append: false });
+  })();
+</script>
+
 </body>
 </html>
