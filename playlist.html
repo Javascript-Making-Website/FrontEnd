@@ -4,53 +4,94 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Emotion Playlist · Playlist</title>
+
+  <!-- 외부 CSS 불러오기 -->
   <link rel="stylesheet" href="./assets/styles.css" />
 </head>
+
+<!-- data-mood: 사이트 감정 테마(색상 변화 용도) -->
 <body data-mood="calm">
+
+  <!-- 상단 헤더 영역 -->
   <header class="topbar">
     <div class="brand">📻 내 재생목록</div>
+
     <nav class="nav">
+      <!-- 페이지 이동 버튼 -->
       <a href="./index.html" class="btn">홈</a>
       <a href="./search.html" class="btn">검색</a>
       <a href="./login.html" class="btn" id="loginLink">로그인</a>
+
+      <!-- 로그인 후 사용자 이름을 표시하는 badge (초기에 hidden) -->
       <span id="userBadge" class="badge hidden"></span>
+
+      <!-- 로그아웃 버튼 (로그인 전에는 hidden) -->
       <button id="logoutBtn" class="btn hidden">로그아웃</button>
     </nav>
   </header>
 
+  <!-- 메인 콘텐츠 -->
   <main class="panel" style="max-width:980px;margin:12px auto;">
+    <!-- 여기 안에 재생목록 아이템이 JS로 동적으로 들어감 -->
     <div id="plList" class="list"></div>
   </main>
 
   <footer class="foot">로그인 사용자별로 재생목록(localStorage) 관리</footer>
 
+  <!-- 인증 관련 스크립트(로그인 상태 표시 등) -->
   <script src="./assets/auth.js"></script>
+
+  <!-- 커스텀 API (재생목록, 검색 처리 등) -->
   <script src="./assets/api.js"></script>
+
   <script>
+    /* 
+      로그인 상태를 읽어서 헤더 UI(로그인/로그아웃, 사용자명 등)를 갱신
+      예) 로그인하면 '로그인' 버튼 숨기고 userBadge 표시함
+    */
     Auth.syncHeader();
 
+    // Playlist 관련 함수 모음(API.Playlist)
     const PL = API.Playlist;
 
+    /**
+     * 재생목록 아이템 하나를 HTML 엘리먼트로 만들어서 반환하는 함수
+     * track: {id, title, artist, thumb, source}
+     */
     function itemEl(track){
       const el = document.createElement('div');
       el.className = 'item';
+
+      // 아이템 내부 구조
       el.innerHTML = `
         <img src="${track.thumb}" alt="thumb" />
         <div>
           <div class="t">${API.cleanTitle(track.title)}</div>
           <div class="s">${track.artist} · <span class="badge">${track.source}</span></div>
         </div>
+
+        <!-- 재생, 삭제 버튼 -->
         <div style="display:flex; gap:6px;">
           <button class="btn btn-play">재생</button>
           <button class="btn btn-remove">삭제</button>
         </div>
       `;
 
+      /** 
+       * 재생 버튼 클릭 시
+       * - 현재 클릭한 track.id를 localStorage에 저장
+       * - index.html(플레이어 화면)으로 이동
+       */
       el.querySelector('.btn-play').onclick = () => {
         localStorage.setItem('currentTrackId', track.id);
         window.location.href = './index.html';
       };
 
+      /**
+       * 삭제 버튼 클릭 시
+       * - 재생목록에서 해당 트랙 제거
+       * - 목록 새로 렌더링
+       */
       el.querySelector('.btn-remove').onclick = () => {
         PL.remove(track.id);
         render();
@@ -59,12 +100,20 @@
       return el;
     }
 
+    /**
+     * 화면에 재생목록 전체를 렌더링하는 함수
+     * - #plList 영역을 비운 뒤
+     * - 저장된 모든 트랙을 itemEl()로 만들어 추가
+     */
     function render(){
       const holder = document.getElementById('plList');
       holder.innerHTML = '';
+
+      // 저장된 트랙 목록을 불러와서 각각 DOM에 추가
       PL.get().forEach(t => holder.appendChild(itemEl(t)));
     }
 
+    // 페이지가 로드되면 처음 한 번 렌더
     render();
   </script>
 </body>

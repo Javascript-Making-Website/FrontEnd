@@ -1,5 +1,5 @@
 let ytPlayer = null; // YouTube player
-let currentTrack = null;
+let currentTrack = null; // 현재 재생 중인 곡 저장
 
 // YouTube IFrame API 콜백 (index.html에서만 DOM이 있음)
 window.onYouTubeIframeAPIReady = function(){
@@ -20,19 +20,21 @@ function onPlayerReady(){
   if (t) loadTrack(t);
 }
 
+// 트랙 불러오기
 function loadTrack(track){
   currentTrack = track;
   localStorage.setItem('currentTrackId', track.id);
   const videoId = track.id.split(':')[1];
   if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
 
+  // 화면 정보 갱신
   const nowThumb = document.getElementById('nowThumb'); if (nowThumb) nowThumb.src = track.thumb;
   const nowTitle = document.getElementById('nowTitle'); if (nowTitle) nowTitle.textContent = API.cleanTitle(track.title);
   const nowSub   = document.getElementById('nowSub');   if (nowSub)   nowSub.textContent   = `${track.artist} · ${track.originalTitle}`;
   const nowSrc   = document.getElementById('nowSource');if (nowSrc)   nowSrc.textContent   = track.source;
   const openOnYT = document.getElementById('openOnYT'); if (openOnYT) openOnYT.href        = track.url;
 
-  renderRateChips();
+  renderRateChips(); // 감정칩 재렌더링
 }
 
 function renderRateChips(){
@@ -73,21 +75,23 @@ function setMood(key){
   renderMoodChips();
 }
 
+//현재 감정 기준으로 재생목록/ 추천곡 정렬
 function sortedTracks(){
   const activeMood = document.body.getAttribute('data-mood');
-  const rates = API.Ratings.get();
+  const rates = API.Ratings.get(); // 유저가 저장한 감정 라벨
   return [...API.list()].sort((a, b) => {
     const score = (t) => {
       let s = 0;
-      if (t.moods?.includes(activeMood)) s += 2;
-      if (rates[t.id] === activeMood) s += 3;
+      if (t.moods?.includes(activeMood)) s += 2;    //곡 자체 감정 태그
+      if (rates[t.id] === activeMood) s += 3;       //유저가 지정한 감정 태그
       if (/official|mv|audio/i.test(t.originalTitle)) s += 0.5;
       return s;
     };
-    return score(b) - score(a);
+    return score(b) - score(a); // 점수 높은 순
   });
 }
 
+// 재생목록/ 추천목록 하나하나 아이템 생성
 function itemEl(track, opts = {}){
   const el = document.createElement('div');
   el.className = 'item';
@@ -99,6 +103,7 @@ function itemEl(track, opts = {}){
     </div>
     ${opts.controls ? '<div style="display:flex;gap:6px;">' + opts.controls + '</div>' : ''}
   `;
+  // 아이템 클릭 시 해당 곡 재생
   el.onclick = (e) => {
     if (e.target && e.target.closest('button')) return; // 버튼 클릭은 제외
     loadTrack(track);
@@ -106,6 +111,7 @@ function itemEl(track, opts = {}){
   return el;
 }
 
+// 추천곡 리스트 렌더링
 function renderRecs(){
   const holder = document.getElementById('recList');
   if (!holder) return;
