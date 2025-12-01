@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Emotion Playlist · Playlist</title>
+  <link rel="stylesheet" href="./assets/styles.css"/>
+  <style>
+    #headerSection{
+      border-radius:18px;
+      overflow:hidden;
+      /* 기본 패널 컬러만 사용 (styles.css 쪽 변수) */
+      background: var(--panel, rgba(15,23,42,0.98));
+      border:1px solid rgba(148,163,184,0.25);
+      transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+    }
+    #headerSection.theme-colored{
+      box-shadow:0 22px 60px rgba(0,0,0,.75);
+    }
+
+    .plv-wrap {
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+      padding:16px;
+    }
+    .plv-header {
+      display:flex;
+      gap:20px;
+      align-items:flex-end;
+    }
+    .plv-cover {
+      width:180px;
+      height:180px;
+      border-radius:16px;
+      background:#020617;
+      overflow:hidden;
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      grid-template-rows:repeat(2,1fr);
+      gap:2px;
+      flex-shrink:0;
+    }
+    .plv-cover img {
+      width:100%;height:100%;object-fit:cover;
+    }
+    .plv-title {
+      font-size:28px;
+      font-weight:700;
+      margin-bottom:4px;
+    }
+    .plv-sub {
+      font-size:13px;
+      opacity:.7;
+    }
+    .plv-controls {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:12px;
+      align-items:center;
+    }
+    .plv-track-row {
+      display:grid;
+      grid-template-columns:24px minmax(0,1fr) 80px;
+      gap:8px;
+      align-items:center;
+      padding:6px 10px;
+      border-radius:8px;
+      cursor:pointer;
+    }
+    .plv-track-row:hover {
+      background:rgba(148,163,184,.10);
+    }
+    .plv-track-main {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      min-width:0;
+    }
+    .plv-track-main img {
+      width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;
+    }
+    .plv-track-title {
+      font-size:14px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .plv-track-sub {
+      font-size:12px;
+      opacity:.7;
+    }
+    /* 재생목록 삭제 버튼(위험 버튼) 스타일 */
+    .btn-danger {
+      background:#d14343;
+    }
+    .btn-danger:hover {
+      background:#e25555;
+    }
+
+    /* 🎨 테마 색 변경 UI */
+    .theme-color-wrap{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+    }
+    .theme-color-wrap input[type="color"]{
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      border:none;
+      padding:0;
+      background:transparent;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body data-mood="calm">
+<header class="topbar">
+  <div class="brand">📂 재생목록</div>
+  <nav class="nav">
+    <a href="./home.html" class="btn">홈</a>
+    <a href="./search.html" class="btn">검색</a>
+    <a href="./playlist.html" class="btn">재생목록</a>
+    <a href="./login.html" id="loginLink" class="btn">로그인</a>
+    <span id="userBadge" class="badge hidden"></span>
+    <button id="logoutBtn" class="btn hidden">로그아웃</button>
+  </nav>
+</header>
+
+<main class="plv-wrap">
+  <section id="headerSection" class="panel">
+    <!-- JS에서 채움 -->
+  </section>
+
+  <section class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="sub">트랙 목록</div>
+      <button id="goAddFromSearch" class="btn">곡 추가하기 (검색으로 이동)</button>
+    </div>
+    <div id="trackList">
+      <!-- JS에서 트랙 렌더링 -->
+    </div>
+  </section>
+</main>
+
+<script src="./assets/api.js"></script>
+<script src="./assets/auth.js"></script>
+<script>
+  const $ = (s) => document.querySelector(s);
+  const searchParams = new URLSearchParams(location.search);
+  const playlistId = searchParams.get('id');
+
+  if (!playlistId) {
+    alert('잘못된 접근입니다.');
+    location.href = './playlist.html';
+  }
+
+  // ─────────────────────────────────────────
+  // 색 유틸: hex ↔ rgb, 색 섞기, css 출력
+  // ─────────────────────────────────────────
+  function hexToRgb(hex) {
+    if (!hex) return { r: 255, g: 255, b: 255 };
+    let c = hex.replace('#', '').trim();
+    if (c.length === 3) {
+      c = c.split('').map(ch => ch + ch).join('');
+    }
+    const num = parseInt(c, 16);
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255,
+    };
+  }
+
+  function rgbToCss({ r, g, b }, alpha) {
+    if (typeof alpha === 'number') {
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // base(어두운 기본색)과 accent(테마색)를 섞어서 계조 만들기
+  // ratio: 0 = base, 1 = accent
+  function mixColor(base, accent, ratio) {
+    const t = Math.max(0, Math.min(1, ratio));
+    return {
+      r: Math.round(base.r + (accent.r - base.r) * t),
+      g: Math.round(base.g + (accent.g - base.g) * t),
+      b: Math.round(base.b + (accent.b - base.b) * t),
+    };
+  }
+
+  // ─────────────────────────────────────────
+  // 플레이리스트 테마를 페이지 전체에 적용
+  // (홈 화면 mood 테마처럼: 배경 + 카드 + 버튼 세트)
+  // ─────────────────────────────────────────
+  function applyPlaylistTheme(themeHex) {
+    const accent = hexToRgb(themeHex || '#22d3ee');
+
+    // 사이트 기본 어두운 베이스(네이비 계열 느낌)
+    const base = { r: 3, g: 7, b: 18 };
+
+    // 페이지 전체 배경, 패널, 헤더용 톤 만들기
+    const pageBg   = mixColor(base, accent, 0.28); // 제일 어두운 톤
+    const panelBg  = mixColor(base, accent, 0.40); // 카드 / 패널 배경
+    const headerBg = mixColor(base, accent, 0.52); // 위 큰 헤더 패널
+    const border   = mixColor(base, accent, 0.70); // 테두리
+    const accentSoft = mixColor(accent, { r: 255, g: 255, b: 255 }, 0.18);
+
+    // 1) body 배경
+    document.body.style.background = rgbToCss(pageBg);
+
+    // 2) 상단 네비게이션 바
+    const topbar = document.querySelector('.topbar');
+    if (topbar) {
+      topbar.style.background = rgbToCss(panelBg);
+      topbar.style.borderBottom = `1px solid ${rgbToCss(border, 0.7)}`;
+      topbar.style.boxShadow = `0 10px 30px ${rgbToCss(base, 0.85)}`;
+    }
+
+    // 3) 패널(카드)들 배경 + 테두리
+    document.querySelectorAll('.panel').forEach(panel => {
+      if (panel.id === 'headerSection') {
+        panel.style.background = rgbToCss(headerBg);
+      } else {
+        panel.style.background = rgbToCss(panelBg);
+      }
+      panel.style.border = `1px solid ${rgbToCss(border, 0.55)}`;
+      panel.style.boxShadow = `0 20px 50px ${rgbToCss(accent, 0.35)}`;
+    });
+
+    // 4) 전역 CSS 변수도 같이 바꾸기
+    //    (버튼, 배지 등 styles.css에서 --accent, --card를 쓰고 있을 거라서)
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--bg', rgbToCss(pageBg));
+    rootStyle.setProperty('--bg-soft', rgbToCss(panelBg));
+    rootStyle.setProperty('--card', rgbToCss(panelBg));
+    rootStyle.setProperty('--accent', rgbToCss(accent));
+    rootStyle.setProperty('--accent-soft', rgbToCss(accentSoft));
+    rootStyle.setProperty('--border-subtle', rgbToCss(border, 0.55));
+
+
+    // 5) 버튼 색 테마에 맞게 조정
+
+    // (1) 기본 버튼들 - 위험 버튼(.btn-danger) 말고 전부
+    document.querySelectorAll('.btn:not(.btn-danger)').forEach(btn => {
+      btn.style.background = rgbToCss(panelBg);
+      btn.style.borderColor = rgbToCss(border, 0.7);
+      btn.style.boxShadow = `0 4px 12px ${rgbToCss(accent, 0.3)}`;
+    });
+
+    // (2) 주요 버튼(전체 재생 같은 primary / play 버튼)은 테마색으로
+    document.querySelectorAll('.btn.primary, .btn[data-role="play"]').forEach(btn => {
+      btn.style.background = rgbToCss(accent);
+      btn.style.borderColor = rgbToCss(accent);
+      btn.style.color = '#fff';
+    });
+
+    // (3) 상단 네비게이션 버튼도 살짝 강조
+    document.querySelectorAll('.topbar .btn').forEach(btn => {
+      btn.style.background = rgbToCss(panelBg);
+      btn.style.borderColor = rgbToCss(border, 0.7);
+    });
+
+  }
+
+  // ─────────────────────────────────────────
+  // API 호출
+  // ─────────────────────────────────────────
+  function buildCoverThumbs(items) {
+    const thumbs = (items || []).map(t => t.thumb).filter(Boolean).slice(0, 4);
+    return thumbs;
+  }
+
+  async function fetchPlaylist() {
+    const res = await fetch(
+      `http://localhost:3001/api/playlists/${encodeURIComponent(playlistId)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) throw new Error('playlist load fail');
+    return res.json();
+  }
+
+  async function updateThemeColor(id, themeColor) {
+    const res = await fetch(
+      `http://localhost:3001/api/playlists/${encodeURIComponent(id)}/theme`,
+      {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeColor }),
+      }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      const msg = data.error || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // ─────────────────────────────────────────
+  // 렌더링
+  // ─────────────────────────────────────────
+  function renderHeader(pl) {
+    const header = $('#headerSection');
+    header.innerHTML = '';
+
+    // 이 재생목록의 테마 색 (없으면 기본 accent)
+    let theme = pl.theme_color || '#22d3ee';
+
+    // ★ 페이지 전체 색 세트 적용 (body, topbar, panel, 버튼 등)
+    applyPlaylistTheme(theme);
+
+    const box = document.createElement('div');
+    box.className = 'plv-header';
+
+    const cover = document.createElement('div');
+    cover.className = 'plv-cover';
+    const thumbs = buildCoverThumbs(pl.items);
+    if (thumbs.length) {
+      thumbs.forEach(src => {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = 'thumb';
+        cover.appendChild(img);
+      });
+      while (cover.childElementCount < 4) {
+        const d = document.createElement('div');
+        d.style.background = '#020617';
+        cover.appendChild(d);
+      }
+    } else {
+      const d = document.createElement('div');
+      d.style.gridColumn = '1/3';
+      d.style.gridRow = '1/3';
+      d.style.display = 'flex';
+      d.style.alignItems = 'center';
+      d.style.justifyContent = 'center';
+      d.textContent = '🎵';
+      cover.appendChild(d);
+    }
+
+    const meta = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'plv-title';
+    title.textContent = pl.title;
+
+    const sub = document.createElement('div');
+    sub.className = 'plv-sub';
+    sub.textContent =
+      `${pl.owner_name || '나'} · 트랙 ${(pl.items || []).length}개 `
+      + `· ♥ ${pl.likes || 0} · ${pl.is_public ? '공개' : '비공개'}`;
+
+    const controls = document.createElement('div');
+    controls.className = 'plv-controls';
+
+    // ▶ 전체 재생 버튼 (accent 기반)
+    const playBtn = document.createElement('button');
+    playBtn.className = 'btn primary';
+    playBtn.textContent = '▶ 전체 재생';
+    playBtn.addEventListener('click', () => {
+      const first = (pl.items || [])[0];
+      if (!first) {
+        alert('재생할 곡이 없습니다.');
+        return;
+      }
+      localStorage.setItem('currentTrackId', first.track_id);
+      location.href = './player.html';
+    });
+
+    // ❌ 재생목록 삭제 버튼
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-danger';
+    deleteBtn.textContent = '재생목록 삭제';
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm(`"${pl.title}" 재생목록을 삭제할까요?`)) return;
+
+      try {
+        const res = await API.deletePlaylist(pl.id);
+        if (res.ok) {
+          alert('재생목록이 삭제되었습니다.');
+          location.href = './playlist.html';
+        } else {
+          if (res.error === 'login required' || res.status === 401) {
+            alert('로그인 후 이용해 주세요.');
+            location.href = './login.html?redirect=playlist';
+          } else if (res.error === 'forbidden' || res.status === 403) {
+            alert('이 재생목록은 삭제할 권한이 없습니다.');
+          } else {
+            alert('삭제 실패: ' + (res.error || '알 수 없는 오류'));
+          }
+        }
+      } catch (e) {
+        console.error('playlist delete error:', e);
+        alert('재생목록 삭제 중 오류가 발생했습니다.');
+      }
+    });
+
+    // 🎨 테마 색 변경 UI
+    const colorWrap = document.createElement('div');
+    colorWrap.className = 'theme-color-wrap';
+
+    const colorLabel = document.createElement('span');
+    colorLabel.className = 'sub';
+    colorLabel.style.opacity = '.85';
+    colorLabel.textContent = '테마 색';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = theme;
+
+    const saveColorBtn = document.createElement('button');
+    saveColorBtn.className = 'btn';
+    saveColorBtn.textContent = '색 저장';
+
+    saveColorBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const newColor = colorInput.value || theme;
+
+      try {
+        await updateThemeColor(pl.id, newColor);
+
+        // 화면 전체 테마를 새 색으로 다시 적용
+        theme = newColor;
+        applyPlaylistTheme(theme);
+
+        alert('테마 색이 저장되었습니다.');
+      } catch (err) {
+        console.error('update theme error:', err);
+        alert('테마 색 저장 실패: ' + err.message);
+      }
+    });
+
+    colorWrap.appendChild(colorLabel);
+    colorWrap.appendChild(colorInput);
+    colorWrap.appendChild(saveColorBtn);
+
+    controls.appendChild(playBtn);
+    controls.appendChild(deleteBtn);
+    controls.appendChild(colorWrap);
+
+    meta.appendChild(title);
+    meta.appendChild(sub);
+    meta.appendChild(controls);
+
+    box.appendChild(cover);
+    box.appendChild(meta);
+
+    header.appendChild(box);
+  }
+
+  function renderTracks(pl) {
+    const list = $('#trackList');
+    list.innerHTML = '';
+
+    const items = pl.items || [];
+    if (!items.length) {
+      list.innerHTML =
+        '<div class="sub" style="opacity:.7;padding:8px;">'
+        + '아직 이 재생목록에 곡이 없습니다. '
+        + '위의 "곡 추가하기" 버튼을 눌러 검색 화면에서 추가해 보세요.'
+        + '</div>';
+      return;
+    }
+
+    items.forEach((t, idx) => {
+      const row = document.createElement('div');
+      row.className = 'plv-track-row';
+
+      const index = document.createElement('div');
+      index.className = 'sub';
+      index.style.textAlign = 'right';
+      index.textContent = idx + 1;
+
+      const main = document.createElement('div');
+      main.className = 'plv-track-main';
+      const img = document.createElement('img');
+      img.src = t.thumb || '';
+      img.alt = 'thumb';
+
+      const texts = document.createElement('div');
+      texts.style.minWidth = 0;
+      texts.innerHTML = `
+        <div class="plv-track-title">${t.title || ''}</div>
+        <div class="plv-track-sub">${t.artist || ''} · ${t.source || ''}</div>
+      `;
+
+      main.appendChild(img);
+      main.appendChild(texts);
+
+      const right = document.createElement('div');
+      right.style.textAlign = 'right';
+      right.innerHTML = `<button class="btn" data-role="play">재생</button>`;
+
+      row.appendChild(index);
+      row.appendChild(main);
+      row.appendChild(right);
+
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        localStorage.setItem('currentTrackId', t.track_id);
+        location.href = './player.html';
+      });
+
+      list.appendChild(row);
+    });
+  }
+
+  // 검색 화면으로 이동할 때 재생목록 id를 같이 넘김
+  $('#goAddFromSearch').addEventListener('click', () => {
+    location.href = `./search.html?addToPlaylist=${encodeURIComponent(playlistId)}`;
+  });
+
+  // 초기 로드
+  (async function init() {
+    try {
+      const pl = await fetchPlaylist();
+      renderHeader(pl);
+      renderTracks(pl);
+    } catch (e) {
+      console.error(e);
+      alert('재생목록을 불러오지 못했습니다.');
+      location.href = './playlist.html';
+    }
+  })();
+</script>
+</body>
+</html>

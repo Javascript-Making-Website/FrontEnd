@@ -36,15 +36,268 @@
   <script src="./assets/auth.js"></script>
 
   <script>
-    function itemEl(track){
-      const el = document.createElement('div');
-      el.className = 'item';
-      const thumb = track.thumb || '';
-      el.innerHTML = `
-        <img src="${thumb}" alt="thumb" />
-        <div>
-          <div class="t">${API.cleanTitle(track.title)}</div>
-          <div class="s">${track.artist ?? ''} · <span class="badge">${track.source ?? ''}</span></div>
+  const BASE = 'http://localhost:3001';
+
+    // 현재 주소창(location)의 물음표(?) 뒤에 적힌 내용들(.search)을 분석할 탐정(sp)을 부릅니다.
+    // -> 예: "?mood=happy&genre=kpop" 부분을 읽기 좋게 분해해줍니다.
+    const sp = new URLSearchParams(location.search);
+
+    // 탐정에게 "혹시 'mood(기분)'라고 적힌 게 있니?"라고 물어봅니다.
+    // -> || '': 있으면 그걸 가져오고(initialMood), 없으면 빈칸('')으로 둡니다. (에러 방지용 보험)
+    const initialMood   = sp.get('mood')   || '';
+
+    // "혹시 'genre(장르)'라고 적힌 게 있니?"
+    const initialGenre  = sp.get('genre')  || '';
+
+    // "혹시 'nation(나라)'이라고 적힌 게 있니?"
+    const initialNation = sp.get('nation') || '';
+
+    // ★ 이 부분은 다른 페이지에서 넘어왔을 때 씁니다.
+    // -> "노래를 검색해서 '이 재생목록(addToPlaylist)'에 추가해줘!"라고 ID를 받아오는 것입니다.
+    // -> 없으면 null(없음)로 둡니다.
+    const targetPlaylistIdFromUrl = sp.get('addToPlaylist') || null; 
+
+    // 위에서 찾아낸 '초기 기분'을 '현재 기분(currentMood)'으로 확정합니다.
+    let currentMood = initialMood;
+
+    //  만약 초기 기분(initialMood)이 설정되어 있다면?
+    if (initialMood) {
+      // -> 웹사이트 배경색이나 분위기를 그 기분에 맞춰서 즉시 바꿉니다.
+      // -> body 태그에 data-mood="happy" 같은 꼬리표를 붙여주는 작업입니다.
+      document.body.setAttribute('data-mood', initialMood);
+    }
+
+  // 페이지네이션 + 최근 검색 결과 저장용
+  let currentQuery   = '';
+  let nextPageToken  = null;
+  let lastSearchList = [];   // ★ player로 넘길 리스트
+  let isLoading      = false; // ★ 중복 로딩 방지
+
+  // 재생목록 추가용 상태
+  let trackToAdd = null;
+
+  // ──────────────────────────────────────
+  // player.html로 이동하는 공통 함수
+  // ──────────────────────────────────────
+ // ★★★ 노래를 클릭하면 플레이어 페이지로 이동시키는 함수 (track: 클릭한 노래 정보)
+function goPlay(track) {
+
+  // 1. [짐 싸기] 현재 검색했던 목록과 설정을 '브라우저 메모장(localStorage)'에 저장해둡니다.
+  try {
+    // (1) "방금까지 보고 있던 검색 결과 리스트(lastSearchList)를 저장해!"
+    // -> JSON.stringify: 리스트 데이터를 문자열(글자)로 포장해서 저장하는 방법입니다.
+    localStorage.setItem('lastSearchList', JSON.stringify(lastSearchList));
+
+    // (2) "방금까지 설정했던 기분, 장르, 검색어 등(Context)도 잊지 말고 저장해!"
+    // -> 플레이어 화면에 가서도 "아, 이 사람이 원래 '신나는' 거 찾고 있었지?"라고 알 수 있게 하기 위함입니다.
+    localStorage.setItem('lastSearchContext', JSON.stringify({
+      mood: initialMood,
+      genre: initialGenre,
+      nation: initialNation,
+      q: currentQuery, // 검색어
+    }));
+  } catch (e) {
+    // (3) [에러 처리] 저장 공간이 꽉 찼거나 오류가 나면?
+    // -> 쿨하게 경고만 남기고 넘어갑니다. (이동은 해야 하니까요)
+    console.warn('failed to save lastSearchList', e);
+  }
+
+
+  // 2. [주소표 만들기] 플레이어 페이지로 가져갈 '주소 꼬리표(Query String)'를 만듭니다.
+  const params = new URLSearchParams();
+
+  // (1) "기분(mood) 설정이 있으면 꼬리표에 적어."
+  if (initialMood)   params.set('mood',   initialMood);
+  
+  // (2) "장르(genre) 설정이 있으면 적어."
+  if (initialGenre)  params.set('genre',  initialGenre);
+  
+  // (3) "국가(nation) 설정이 있으면 적어."
+  if (initialNation) params.set('nation', initialNation);
+  
+  // (4) [출처 표시] "이 손님은 '검색(search)' 화면에서 왔습니다"라고 표시.
+  params.set('from', 'search');
+  
+  // (5) [핵심] "그리고 가장 중요한, '재생할 노래 ID'는 이거야!"
+  params.set('id', track.id);
+
+
+  // 위에서 만든 꼬리표를 붙여서 플레이어 페이지로 이동합니다.
+  // -> 결과 예시: ./player.html?mood=happy&from=search&id=12345
+  window.location.href = `./player.html?${params.toString()}`;
+}
+
+
+  // ──────────────────────────────────────
+  // 재생목록 선택 모달 관련
+  // ──────────────────────────────────────
+  const plModal       = document.getElementById('plPicker');
+  const plModalList   = document.getElementById('plPickerList');
+  const plModalHint   = document.getElementById('plPickerHint');
+  const plModalClose  = document.getElementById('plPickerClose');
+
+  function closePlaylistPicker() {
+    trackToAdd = null;
+    plModal.classList.add('hidden');
+  }
+
+  plModalClose.addEventListener('click', closePlaylistPicker);
+  // 바깥 영역 클릭 시 닫기
+  plModal.addEventListener('click', (e) => {
+    if (e.target === plModal) closePlaylistPicker();
+  });
+
+  async function openPlaylistPicker(track) {
+    trackToAdd = track;
+    plModal.classList.remove('hidden');
+    plModalList.innerHTML = '<div class="sub">재생목록을 불러오는 중...</div>';
+
+    if (targetPlaylistIdFromUrl) {
+      plModalHint.textContent = `현재 편집 중인 재생목록 ID: ${targetPlaylistIdFromUrl}`;
+    } else {
+      plModalHint.textContent = '추가할 재생목록을 선택하세요.';
+    }
+
+    try {
+      const res = await fetch(`${BASE}/api/playlists`, {
+        credentials: 'include',
+      });
+      if (res.status === 401) {
+        alert('로그인 후 재생목록에 곡을 추가할 수 있습니다.');
+        location.href = './login.html';
+        return;
+      }
+      const data = await res.json();
+      let lists = data.items || [];
+
+      if (!lists.length) {
+        plModalList.innerHTML = '<div class="sub">아직 만든 재생목록이 없습니다.</div>';
+        return;
+      }
+
+      // URL에서 넘어온 재생목록이 있으면 맨 위로 올리기
+      // 1. [VIP 확인] "혹시 콕 집어서 지정된 재생목록(targetPlaylistIdFromUrl)이 있나요?"
+      // -> 예: 플레이리스트 화면에서 '곡 추가'를 눌러서 넘어온 경우
+      if (targetPlaylistIdFromUrl) {
+        
+        const idStr = String(targetPlaylistIdFromUrl); // 안전하게 문자로 변환
+
+        // 2. [줄 세우기] 목록을 복사(slice)해서 재정렬(sort)합니다.
+        lists = lists.slice().sort((a, b) => {
+          // -> A가 그 '지정된 목록'이면 앞으로(-1), 아니면 그대로(0)
+          const aKey = String(a.id) === idStr ? -1 : 0;
+          const bKey = String(b.id) === idStr ? -1 : 0;
+          
+          // -> 결과적으로 지정된 목록이 리스트 최상단(0번)으로 올라오게 됩니다.
+          return aKey - bKey;
+        });
+      }
+
+// 3. [청소] 팝업창 안을 깨끗이 비웁니다.
+      plModalList.innerHTML = '';
+
+      // 4. [반복] 재생목록(pl) 하나마다 버튼을 만듭니다.
+      lists.forEach(pl => {
+        const btn = document.createElement('button'); // 버튼 생성
+        btn.type = 'button';
+        btn.className = 'btn'; // 기본 스타일 적용
+
+        // 5. [강조 여부 확인] "이게 아까 그 VIP(지정된) 목록인가요?"
+        const isTarget =
+          targetPlaylistIdFromUrl &&
+          String(pl.id) === String(targetPlaylistIdFromUrl);
+
+        // 6. [내용 채우기] 제목, 곡 수, 공개/비공개 여부를 적습니다.
+        btn.innerHTML = `
+          <span style="flex:1;">${pl.title} · 트랙 ${(pl.items || []).length}개</span>
+          <span style="font-size:11px;opacity:.7;">${pl.is_public ? '공개' : '비공개'}</span>
+        `;
+        
+        // 7. [디자인] 버튼 내부 정렬 (가로 배치, 간격 등)
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '6px';
+
+        // 8. [하이라이트] VIP 목록이라면 초록색 테두리를 쳐서 눈에 띄게 해줍니다.
+        if (isTarget) {
+          btn.style.border = '1px solid var(--accent, #1ed760)';
+        }
+
+       // 9. [클릭 설정] 사용자가 이 재생목록 버튼을 누르면 실행!
+        btn.addEventListener('click', async () => {
+          try {
+            // (1) [서버 전송] "이 노래(trackId)를, 이 재생목록(playlistId)의 맨 앞(position: 0)에 넣어주세요!"
+            const resAdd = await fetch(`${BASE}/api/playlist/items`, {
+              method: 'POST', // 데이터 저장 요청
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include', // 로그인 정보 포함
+              body: JSON.stringify({
+                playlistId: pl.id,
+                trackId: trackToAdd.id, // 추가할 노래 ID
+                position: 0,            // 0: 맨 위에 추가하겠다는 뜻
+              }),
+            });
+
+            // (2) [응답 확인] 서버가 보낸 결과를 열어봅니다.
+            const dataAdd = await resAdd.json().catch(() => ({}));
+
+            // (3) [로그인 체크] "어? 너 로그인 안 했네?" (401 에러)
+            if (resAdd.status === 401) {
+              alert('로그인 후 재생목록에 곡을 추가할 수 있습니다.');
+              location.href = './login.html'; // 로그인 페이지로 쫓아냄
+              return;
+            }
+
+            // (4) [실패 처리] 다른 이유로 실패했다면? (예: 권한 없음, 서버 오류)
+            if (!resAdd.ok) {
+              alert('추가 실패: ' + (dataAdd.error || `${resAdd.status}`));
+              return;
+            }
+
+            // (5) [성공!] "잘 저장됐습니다"라고 알려주고 팝업창을 닫습니다.
+            alert(`"${pl.title}" 재생목록에 곡을 추가했습니다.`);
+            closePlaylistPicker();
+
+          } catch (e) {
+            // (6) [통신 에러] 인터넷 끊김 등으로 아예 전송조차 못 했을 때
+            console.error(e);
+            alert('재생목록에 추가하는 중 오류가 발생했습니다.');
+          }
+        });
+
+        // 10. [부착] 완성된 버튼을 목록 상자에 집어넣습니다.
+        plModalList.appendChild(btn);
+      }); // 반복 끝
+
+    } catch (e) {
+      // 11. [전체 에러] 목록 자체를 못 불러왔을 때 (빨간 글씨로 에러 표시)
+      console.error(e);
+      plModalList.innerHTML =
+        '<div class="sub" style="color:#f66;">재생목록을 불러오지 못했습니다.</div>';
+    }
+  }
+
+  // ──────────────────────────────────────
+  // 아이템 렌더링
+  // ──────────────────────────────────────
+  function itemEl(track) {
+    // 노래 정보를 담을 '투명한 상자(div)'를 하나 조립합니다.
+    const el = document.createElement('div');
+    // 상자에 'item'이라는 스타일(CSS) 이름표를 붙입니다.
+    // -> CSS 파일에 미리 정의된 대로 예쁜 모양(여백, 테두리 등)을 갖게 됩니다.
+    el.className = 'item';
+    // 앨범 표지(thumb) 주소가 있으면 쓰고, 없으면 빈칸('')으로 둡니다.
+    const thumb = track.thumb || '';
+
+  //  4. [내용 채우기] 상자(el) 안을 이미지, 글씨, 버튼으로 채워 넣습니다.
+  // -> 백틱(`)을 사용해서 HTML 코드를 한 번에 작성합니다.
+    el.innerHTML = `
+      <img src="${thumb}" alt="thumb" />
+      <div style="min-width:0;">
+        <div class="t">${API.cleanTitle(track.title)}</div>
+        <div class="s">
+          ${track.artist ?? ''} ·
+          <span class="badge">${track.source ?? ''}</span>
         </div>
       `;
       el.onclick = () => {
@@ -57,24 +310,199 @@
     function render(list){
       const holder = document.getElementById('resultList');
       holder.innerHTML = '';
-      list.forEach(t => holder.appendChild(itemEl(t)));
+    }
+    list.forEach(t => holder.appendChild(itemEl(t)));
+
+  function setLoadMoreVisible(visible) {
+    const btn = document.getElementById('loadMoreBtn');
+    if (!btn) return;
+    if (visible) btn.classList.remove('hidden');
+    else btn.classList.add('hidden');
+  }
+
+  // ──────────────────────────────────────
+  // 감정 칩 렌더링 (UI만, 검색은 그대로)
+  // ──────────────────────────────────────
+  // 페이지가 로드되자마자 이 함수가 자동으로 실행되어 버튼을 만듭니다.
+  (function renderMoodChips() {
+    
+    // 감정 버튼들을 담을 '버튼 영역'을 찾아옵니다.
+    const holder = document.getElementById('moodChips');
+
+    // 버튼 영역을 깨끗이 비웁니다. (기존 내용물 제거)
+    holder.innerHTML = '';
+
+    // 미리 정해둔 감정 목록(API.MOODS)을 하나씩 꺼내서 버튼을 만듭니다. 
+    // m은 감정 데이터 하나를 뜻합니다.
+    API.MOODS.forEach(m => {
+
+      // 비어있는 <button> 태그를 하나 만듭니다.
+      const b = document.createElement('button');
+
+      // 이 버튼의 타입을 '일반 버튼'으로 지정합니다. 
+      // -> (폼 안에 있어도 엔터키 등으로 자동 전송되지 않게 하는 안전장치)
+      b.type = 'button';
+
+      // css
+      b.className = 'chip';
+
+      // 버튼 위에 미리 설정해둔 감정을 적습니다.
+      b.textContent = m.label;
+
+      // 사용자가 이 버튼을 클릭했을 때
+      b.onclick = async () => {
+        
+        // 웹사이트 전체 배경색 등을 선택한 감정에 맞춰 바꿉니다.
+        // -> body 태그에 data-mood="happy" 같은 꼬리표를 붙여주면 CSS가 색을 바꿉니다.
+        document.body.setAttribute('data-mood', m.key);
+
+        // 프로그램 내부 변수(currentMood)에 "지금 선택된 감정은 이거야"라고 저장합니다.
+        // -> 나중에 검색할 때 이 변수를 사용합니다.
+        currentMood = m.key;
+
+        // 새로운 감정으로 검색하니까, 페이지 번호를 '1페이지'로 되돌립니다.
+        // -> 이전에 5페이지를 보고 있었더라도, 감정이 바뀌면 처음부터 봐야 하니까요.
+        nextPageToken = null; 
+
+        // 설정된 감정(currentMood)을 가지고 서버에서 새 노래 목록을 가져옵니다.
+        // -> append: false (중요!): "기존 노래 목록은 싹 지우고 새로 그려라!"
+        await fetchAndRender({ append: false });
+      };
+
+      // (6) 완성된 버튼(b)을 '버튼 영역(holder)'에 집어넣습니다.
+      holder.appendChild(b);
+    });
+  })();
+
+  // ──────────────────────────────────────
+  // 실제 /api/search 호출
+  // ──────────────────────────────────────
+// -> append: true면 '더 보기' (밑에 이어 붙이기), false면 '새 검색' (덮어쓰기)
+async function fetchAndRender({ append = false } = {}) {
+
+  // 1. [중복 방지] "지금 이미 데이터 가져오는 중인가요?"
+  // -> 로딩 중(isLoading)이면 또 요청하지 말고 그냥 돌아가세요. (광클 방지)
+  if (isLoading) return;         
+  
+  // 2. [깃발 꽂기] "자, 지금부터 로딩 시작합니다!" (다른 요청 못 들어오게 잠금)
+  isLoading = true;
+
+  // 3. [버튼 숨김] 로딩하는 동안 사용자가 '더 보기' 버튼을 또 누르지 못하게 잠시 숨깁니다.
+  // -> (새로 검색할 땐 어차피 화면이 바뀌니 상관없고, '더 보기'일 때만 중요)
+  if (append) setLoadMoreVisible(false); 
+
+  // 4. [주문서 작성] 서버에 보낼 검색 조건들을 적습니다.
+  const params = {
+    q: currentQuery,       // 검색어 (예: 아이유)
+    mood: currentMood,     // 기분 (예: 신나는)
+    genre: initialGenre,   // 장르
+    nation: initialNation, // 국가
+  };
+
+  // 5. [페이지 번호] "이어서 보는 거라면(append), 다음 페이지 번호표도 챙기세요."
+  if (append && nextPageToken) {
+    params.pageToken = nextPageToken;
+  }
+
+  try {
+    // 6. [서버 요청] 작성한 주문서(params)를 들고 서버에 다녀옵니다.
+    // -> await: 데이터 받아올 때까지 여기서 멈춰서 기다립니다.
+    const r = await API.search(params);
+    
+    // -> 받아온 데이터에서 노래 목록만 꺼냅니다. (없으면 빈 목록 [])
+    const items = r.items || [];
+
+    // 7. [기억하기] ★ 중요!
+    // -> 나중에 플레이어 화면으로 넘어갈 때를 대비해 검색 결과를 변수(lastSearchList)에 저장해둡니다.
+    if (append) {
+      // 이어 붙이기 모드면: 기존 목록 뒤에 새 목록을 풀칠해서 붙입니다(concat).
+      lastSearchList = lastSearchList.concat(items);
+    } else {
+      // 새 검색 모드면: 기존 목록 싹 버리고 새 목록으로 갈아치웁니다.
+      lastSearchList = items.slice();
     }
 
-    // 감정 칩 렌더링
-    (function renderMoodChips(){
-      const holder = document.getElementById('moodChips');
-      holder.innerHTML = '';
-      API.MOODS.forEach(m => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'chip';
-        b.textContent = m.label;
-        b.onclick = () => { document.body.setAttribute('data-mood', m.key); };
-        holder.appendChild(b);
-      });
-    })();
+    // 8. [화면 그리기] 가져온 노래들(items)을 실제로 화면에 예쁜 카드로 만듭니다.
+    // -> render 함수에게 "이거 이어 붙일지(append) 새로 그릴지" 알려줍니다.
+    render(items, { append });
 
-    // 검색 이벤트 (백엔드 호출로 변경)
+    // 9. [다음 준비] "서버님, 다음 페이지 또 있나요?"
+    // -> 있으면 번호표(token)를 챙기고, 없으면 null(끝).
+    nextPageToken = r.nextPageToken || null;
+    
+    // -> 다음 페이지가 있으면 '더 보기' 버튼을 보여주고, 없으면 숨깁니다.
+    setLoadMoreVisible(!!nextPageToken);
+
+  } catch (err) {
+    // 10. [에러 처리] 서버가 고장 났거나 인터넷이 끊겼을 때
+    console.warn('search failed, fallback to local', err);
+
+    // -> [플랜 B] 만약 '새 검색' 중이었다면 화면이 텅 비니까,
+    // -> 앱 안에 내장된 기본 노래 목록(API.list())이라도 보여줍니다.
+    if (!append) {
+      const items = API.list();
+      lastSearchList = items.slice();
+      render(items, { append: false });
+      
+      // 기본 목록이니 다음 페이지는 없습니다.
+      nextPageToken = null;
+      setLoadMoreVisible(false);
+    }
+  } finally {
+    // 11. [뒷정리] 성공하든 실패하든 무조건 실행되는 곳
+    // -> "작업 끝났습니다!" 깃발을 내려서 다시 요청을 받을 수 있게 합니다.
+    isLoading = false;
+  }
+}
+
+  // ──────────────────────────────────────
+  // 무한 스크롤 체크 함수
+  // ──────────────────────────────────────
+  // 스크롤이 바닥에 닿았는지 감시하고, 새 데이터를 불러오는 함수
+  async function checkInfiniteScroll() {
+
+    // 불러올 페이지가 없거나 로딩 중이라면 여기서 멈춤. (중복 로딩 방지)
+    if (!nextPageToken || isLoading) return;
+
+    // 노래 목록이 들어있는 상자(리스트)를 찾습니다.
+    const listEl = document.getElementById('resultList');
+
+    // [ 1 ] 노래 목록 상자(예 : 검색창) 안에서만 스크롤이 생겼을 때
+    let needMore = false; // "더 로딩할까요?"를 판단 (처음엔 '아니요')
+
+    // 상자가 존재하고, 내용물이 상자보다 길어서 스크롤이 생긴 상태라면?
+    if (listEl && listEl.scrollHeight > listEl.clientHeight + 10) {
+      // 현재 눈에 보이는 바닥 위치 계산: (스크롤 내린 만큼 + 화면 높이)
+      const bottom = listEl.scrollTop + listEl.clientHeight;
+      // 로딩 마지노선 설정 : 바닥에서 300px 정도 남았을 때 미리 로딩
+      const limit  = listEl.scrollHeight - 300; 
+      //  판단: 현재 보는 위치가 마지노선을 넘었으면 더 필요하다는 신호를 보냄
+      if (bottom >= limit) needMore = true;
+    }
+
+
+    // [ 2 ] 웹페이지 전체(윈도우) 스크롤일 때
+    // (목록 상자가 아니라 화면 전체를 스크롤하는 경우를 대비한 보험 코드)
+    const root = document.documentElement; // 웹페이지 전체 통
+
+    //  현재 윈도우의 바닥 위치 계산
+    const winBottom = root.scrollTop + root.clientHeight;
+    // 전체 페이지의 로딩 마지노선 (바닥에서 300px 위)
+    const winLimit  = root.scrollHeight - 300;
+    // 판단: 전체 스크롤이 바닥에 가까워졌으면 "더 필요해!"
+    if (winBottom >= winLimit) needMore = true;
+
+
+    // 최종 결과
+    // 상황 1이든 2든, "더 필요하다(needMore)"고 판단되면
+    if (needMore) {
+      // 서버에서 다음 데이터를 가져와서 화면에 '이어 붙이기(append: true)'.
+      await fetchAndRender({ append: true });
+    }
+  }
+  // ──────────────────────────────────────
+  // 이벤트 핸들러들
+  // ──────────────────────────────────────
   document.getElementById('searchForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const q = document.getElementById('searchInput').value.trim();
@@ -88,7 +516,22 @@
     }
   });
 
-  // 초기 렌더도 백엔드로 시도(안되면 더미)
+// ★★★ '더 보기 버튼(loadMoreBtn)'을 클릭(click)했을 때 실행할 행동 정의
+document.getElementById('loadMoreBtn').addEventListener('click', async () => {
+  
+  // -> 다음 페이지 번호표(nextPageToken)가 없다면, 더 불러올 게 없으니 아무것도 안 하고 멈춥니다.
+  if (!nextPageToken) return;
+
+  // [데이터 가져오기] 다음 페이지 데이터를 서버에서 가져옵니다.
+  // -> append: true (중요!): "기존 목록을 지우지 말고, 그 밑에 이어서 붙여라"는 뜻입니다.
+  await fetchAndRender({ append: true });
+});
+
+  // ★ 무한 스크롤 이벤트 등록
+  window.addEventListener('scroll', checkInfiniteScroll);
+  document.getElementById('resultList').addEventListener('scroll', checkInfiniteScroll);
+
+  // 초기 진입 시: mood/genre/nation만으로 첫 페이지 자동 로드
   (async () => {
     try {
       const r = await API.search({});
