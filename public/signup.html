@@ -1,16 +1,18 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko"> <!-- 한국어 설정 -->
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Emotion Playlist · Signup</title>
-  <link rel="stylesheet" href="./assets/styles.css"/>
+  <meta charset="utf-8"/> <!-- 한글이 깨지지 않도록 설정 -->
+  <meta name="viewport" content="width=device-width,initial-scale=1"/> <!-- 모바일 화면 맞춤 -->
+  <title>Emotion Playlist · Signup</title> <!-- 브라우저 탭 제목 -->
+  <link rel="stylesheet" href="./assets/styles.css"/> <!-- CSS 연결 -->
 </head>
+
 <body data-mood="calm">
   <header class="topbar">
-    <div class="brand">📝 회원가입</div>
+    <div class="brand">📝 회원가입</div> <!-- 상단 제목 -->
     <nav class="nav">
-      <a href="./home.html" class="btn">홈</a>
+      <!-- 기본 메뉴 버튼들 -->
+      <a href="./home.html" class="btn">홈</a> 
       <a href="./search.html" class="btn">검색</a>
       <a href="./playlist.html" class="btn">재생목록</a>
       <a href="./login.html" class="btn">로그인</a>
@@ -20,115 +22,89 @@
   <main class="panel" style="max-width:420px;margin:16px auto;">
     <div class="title" style="margin-bottom:8px">새 계정 만들기</div>
 
+    <!-- 회원가입 입력칸들 -->
     <div style="display:flex;flex-direction:column;gap:8px">
-      <input id="username" placeholder="아이디"
-        style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
+      <input id="username" placeholder="아이디"/>        <!-- 아이디 입력 -->
+      <input id="email" placeholder="이메일 (선택)"/>    <!-- 이메일 입력(선택) -->
+      <input id="password" type="password" placeholder="비밀번호"/> <!-- 비밀번호 -->
+      <input id="password2" type="password" placeholder="비밀번호 확인"/> <!-- 비밀번호 체크 -->
 
-      <input id="email" placeholder="이메일 (선택)"
-        style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
-
-      <input id="password" type="password" placeholder="비밀번호"
-        style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
-
-      <input id="password2" type="password" placeholder="비밀번호 확인"
-        style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
-
-      <button id="signupBtn" class="btn primary">회원가입</button>
+      <button id="signupBtn" class="btn primary">회원가입</button> <!-- 회원가입 버튼 -->
     </div>
   </main>
 
-  <!-- 서버 API / 인증 스크립트 -->
+  <!-- 서버 요청을 위한 스크립트 -->
   <script src="./assets/api.js"></script>
   <script src="./assets/auth.js"></script>
 
   <script>
-    const BASE = 'http://localhost:3001';
+    const BASE = 'http://localhost:3001'; // 정보를 보낼 서버 주소
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const usernameEl = document.getElementById('username');
-      const emailEl    = document.getElementById('email');
-      const pwEl       = document.getElementById('password');
-      const pw2El      = document.getElementById('password2');
-      const btn        = document.getElementById('signupBtn');
+    document.addEventListener('DOMContentLoaded', () => { // 페이지 로딩 후 실행
+      // 입력칸과 버튼 가져오기
+      const usernameEl = document.getElementById('username'); // 아이디 입력칸
+      const emailEl    = document.getElementById('email');    // 이메일 입력칸
+      const pwEl       = document.getElementById('password'); // 비밀번호 입력칸
+      const pw2El      = document.getElementById('password2'); // 비밀번호 확인칸
+      const btn        = document.getElementById('signupBtn'); // 회원가입 버튼
 
-      // 필수 요소가 없으면 초기화 중단
-      if (!usernameEl || !pwEl || !pw2El || !btn) {
-        console.warn('signup elements not found', {
-          usernameEl, emailEl, pwEl, pw2El, btn
-        });
-        return;
-      }
+      // 혹시라도 입력칸이 없으면 실행 중단 (예외 처리)
+      if (!usernameEl || !pwEl || !pw2El || !btn) return;
 
+      // 회원가입 버튼 누르면 실행되는 함수
       async function handleSignup(e) {
-        if (e) e.preventDefault();
+        if (e) e.preventDefault(); // 기본 동작 막기
 
-        const username = usernameEl.value.trim();
-        const email    = (emailEl?.value || '').trim();
-        const pw       = pwEl.value;
-        const pw2      = pw2El.value;
+        // 사용자가 입력한 값 가져오기
+        const username = usernameEl.value.trim(); // 아이디
+        const email    = (emailEl?.value || '').trim(); // 이메일
+        const pw       = pwEl.value;   // 비밀번호
+        const pw2      = pw2El.value;  // 비밀번호 확인을 위한 2차 입력
 
-        if (!username) {
-          alert('아이디를 입력하세요.');
-          usernameEl.focus();
-          return;
-        }
-        if (!pw) {
-          alert('비밀번호를 입력하세요.');
-          pwEl.focus();
-          return;
-        }
-        if (pw.length < 6) {
-          alert('비밀번호는 최소 6자 이상으로 입력하세요.');
-          pwEl.focus();
-          return;
-        }
-        if (pw !== pw2) {
-          alert('비밀번호가 일치하지 않습니다.');
-          pw2El.focus();
-          return;
-        }
+        // 기본 체크(빈칸/비밀번호 길이/일치 여부 확인)
+        if (!username) return alert('아이디를 입력하세요.');
+        if (!pw) return alert('비밀번호를 입력하세요.');
+        if (pw.length < 6) return alert('비밀번호는 최소 6자 이상이어야 합니다.');
+        if (pw !== pw2) return alert('비밀번호가 서로 다릅니다.');
 
         try {
+          // 서버로 회원가입 요청 보내기
           const res = await fetch(`${BASE}/api/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ username, password: pw, email })
+            credentials: 'include', // 쿠키 포함
+            body: JSON.stringify({ username, password: pw, email }) // 보낼 데이터
           });
 
-          const data = await res.json().catch(() => ({}));
+          const data = await res.json().catch(() => ({})); // 응답을 JSON으로 변환
 
           if (!res.ok) {
-            // 서버에서 내려주는 에러 메시지 그대로 노출
-            alert('회원가입 실패: ' + (data.error || `${res.status} ${res.statusText}`));
-            return;
+            // 실패 시 서버 메시지 보여주기
+            return alert('회원가입 실패: ' + (data.error || '알 수 없는 오류'));
           }
 
-          // 프론트 로그인 상태 저장 (auth.js에서 쓰는 형식 그대로)
+          // 성공 시 브라우저에 로그인 정보 저장
           localStorage.setItem('ep_user', JSON.stringify({
             name: username,
             loggedIn: true,
             createdAt: Date.now()
           }));
 
-          alert('회원가입이 완료되었습니다! 자동으로 로그인됩니다.');
-          location.href = './home.html';
+          alert('회원가입이 완료되었습니다!'); // 성공 안내
+          location.href = './home.html'; // 홈 화면으로 이동
+
         } catch (err) {
-          console.error('signup error', err);
-          alert('회원가입 실패: ' + (err?.message || '알 수 없는 오류'));
+          alert('회원가입 중 오류가 발생했습니다.'); // 예외 처리
         }
       }
 
-      // 버튼 클릭 시
+      // 버튼 눌렀을 때 회원가입 실행
       btn.addEventListener('click', handleSignup);
 
-      // 각 input에서 엔터 눌렀을 때도 동작
+      // 입력칸에서 엔터 키를 눌러도 회원가입 실행 엔터 키의 기본 동작을 막는 역할
       [usernameEl, emailEl, pwEl, pw2El].forEach((el) => {
         el.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSignup();
-          }
+          if (e.key === 'Enter') handleSignup();
         });
       });
     });

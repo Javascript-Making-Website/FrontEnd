@@ -2,87 +2,117 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8"/>
+  <!-- 화면 크기에 맞게 자동 조정 → 모바일에서도 보기 좋게 -->
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Emotion Playlist · Login</title>
+
+  <!-- 디자인(모양, 색깔 등)을 담당하는 CSS 파일 불러오기 -->
   <link rel="stylesheet" href="./assets/styles.css"/>
 </head>
 <body data-mood="calm">
+
+  <!-- 화면 맨 위: 사이트 이름 + 메뉴 버튼들 -->
   <header class="topbar">
+
+    <!-- 이 페이지가 로그인 화면이라는 표시 -->
     <div class="brand">🔐 로그인</div>
+
+    <!-- 다른 페이지로 이동할 수 있는 버튼들 -->
     <nav class="nav">
       <a href="./home.html" class="btn">홈</a>
       <a href="./search.html" class="btn">검색</a>
       <a href="./playlist.html" class="btn">재생목록</a>
     </nav>
+
   </header>
 
+  <!-- 로그인 입력창들이 들어가는 메인 영역 -->
   <main class="panel" style="max-width:420px;margin:16px auto;">
+
     <div class="title" style="margin-bottom:8px">아이디로 로그인</div>
 
     <div style="display:flex;flex-direction:column;gap:8px">
+
+      <!-- 아이디 입력칸 -->
       <input id="username" placeholder="아이디"
         style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
 
+      <!-- 비밀번호 입력칸 (입력 내용이 ****로 가려짐) + 보안성을 높혀줌-->
       <input id="password" type="password" placeholder="비밀번호"
         style="padding:10px;border-radius:10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.12)"/>
 
+      <!-- 로그인 버튼 -->
       <button id="go" class="btn primary">로그인</button>
 
+      <!-- 계정 없는 사람을 위한 회원가입 안내및 유도 -->
       <div class="sub" style="margin-top:4px">
         아직 계정이 없나요?
         <a href="./signup.html" class="btn" style="padding:4px 8px;margin-left:4px">회원가입</a>
       </div>
     </div>
+
   </main>
 
-  <!-- 전역 API + auth -->
+  <!-- 서버와 통신하는 코드(API), 로그인 상태 저장 코드(Auth) 불러오기 -->
   <script src="./assets/api.js"></script>
   <script src="./assets/auth.js"></script>
 
   <script>
+    /* 입력칸과 버튼을 자바스크립트에서 사용하기 위해 가져옴 */
     const idEl  = document.getElementById('username');
     const pwEl  = document.getElementById('password');
     const goBtn = document.getElementById('go');
 
-    // 🔹 URL 쿼리에서 redirect 값 읽기 (예: ?redirect=playlist)
+    /* URL 뒤에 redirect=playlist 같은 게 붙어 있는지 확인
+       → 로그인 끝난 뒤 어디로 이동할지 결정하는 용도 */
     const params   = new URLSearchParams(window.location.search);
     const redirect = params.get('redirect');
 
+    // 로그인 기능 담당 함수
     async function doLogin() {
-      const username = idEl.value.trim();
-      const password = pwEl.value;
+      const username = idEl.value.trim(); // 입력한 아이디
+      const password = pwEl.value;        // 입력한 비밀번호
 
+      // 아이디/비밀번호 안 적으면 알려주기
       if (!username) { alert('아이디를 입력하세요.'); idEl.focus(); return; }
       if (!password) { alert('비밀번호를 입력하세요.'); pwEl.focus(); return; }
 
       try {
-        // 서버 로그인
+        // 서버에 아이디/비밀번호 맞는지 확인 요청
         const res = await API.login({ username, password });
 
-        // 서버가 name / user.name 등을 주면 사용, 없으면 아이디 사용
+        // 서버에서 사용자 이름이 오면 표시용으로 저장
         const displayName =
           (res && (res.user?.name || res.name)) || username;
 
-        // 🔹 로컬 로그인 상태 저장 (네비게이션 뱃지 등용)
+        // 로그인 상태를 저장해두기 → 다른 페이지에서도 로그인 유지됨
         if (window.Auth && Auth.saveUser) {
           Auth.saveUser(displayName);
         }
 
-        // 🔹 redirect 값에 따라 이동
+        /* 로그인 성공 후 이동할 페이지 결정
+           redirect 값이 playlist면 재생목록으로 이동 즉 redirect 값에 따라 페이지 화면이 결정된다
+           없으면 기본적으로 홈 화면으로 이동 */
         if (redirect === 'playlist') {
           location.href = './playlist.html';
         } else {
           location.href = './home.html';
         }
       } catch (e) {
+        // 서버에서 에러가 오면 실패 메시지 보여주기
         alert('로그인 실패: ' + (e?.error ?? '알 수 없는 오류'));
       }
     }
 
+    // 로그인 버튼을 누르면 로그인 시도
     goBtn.addEventListener('click', doLogin);
+
+    // 비밀번호 입력 중 Enter 키 누르면 로그인 실행
     pwEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') doLogin();
     });
+
+    // 아이디 입력 중 Enter 누르면 비밀번호 칸으로 이동
     idEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') pwEl.focus();
     });
