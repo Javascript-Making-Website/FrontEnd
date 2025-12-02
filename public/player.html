@@ -102,7 +102,7 @@
     const initialSub    = urlParams.get('sub')    || '';
     const initialTone   = urlParams.get('tone')   || '';
     const fromParam     = urlParams.get('from')   || '';
-    const playlistIdParam = urlParams.get('playlistId') || '';
+    const playlistIdParam = urlParams.get('playlistId') || urlParams.get('id') || '';
 
     // body에 기본 mood 적용
     document.body.setAttribute('data-mood', initialMood);

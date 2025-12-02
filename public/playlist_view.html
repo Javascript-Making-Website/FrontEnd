@@ -159,33 +159,20 @@
   }
 
   // ─────────────────────────────────────────
-  // 색 유틸: hex ↔ rgb, 색 섞기, css 출력
+  // 색 유틸
   // ─────────────────────────────────────────
   function hexToRgb(hex) {
     if (!hex) return { r: 255, g: 255, b: 255 };
     let c = hex.replace('#', '').trim();
-    if (c.length === 3) {
-      c = c.split('').map(ch => ch + ch).join('');
-    }
+    if (c.length === 3) c = c.split('').map(ch => ch + ch).join('');
     const num = parseInt(c, 16);
-    return {
-      r: (num >> 16) & 255,
-      g: (num >> 8) & 255,
-      b: num & 255,
-    };
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   }
-
-  function rgbToCss({ r, g, b }, alpha) {
-    if (typeof alpha === 'number') {
-      return `rgba(${r},${g},${b},${alpha})`;
-    }
-    return `rgb(${r},${g},${b})`;
+  function rgbToCss({ r, g, b }, a) {
+    return (typeof a === 'number') ? `rgba(${r},${g},${b},${a})` : `rgb(${r},${g},${b})`;
   }
-
-  // base(어두운 기본색)과 accent(테마색)를 섞어서 계조 만들기
-  // ratio: 0 = base, 1 = accent
-  function mixColor(base, accent, ratio) {
-    const t = Math.max(0, Math.min(1, ratio));
+  function mixColor(base, accent, t) {
+    t = Math.max(0, Math.min(1, t));
     return {
       r: Math.round(base.r + (accent.r - base.r) * t),
       g: Math.round(base.g + (accent.g - base.g) * t),
@@ -194,96 +181,76 @@
   }
 
   // ─────────────────────────────────────────
-  // 플레이리스트 테마를 페이지 전체에 적용
-  // (홈 화면 mood 테마처럼: 배경 + 카드 + 버튼 세트)
+  // 테마 적용 (전역에서 특정 변수 참조 X)
   // ─────────────────────────────────────────
   function applyPlaylistTheme(themeHex) {
     const accent = hexToRgb(themeHex || '#22d3ee');
-
-    // 사이트 기본 어두운 베이스(네이비 계열 느낌)
     const base = { r: 3, g: 7, b: 18 };
 
-    // 페이지 전체 배경, 패널, 헤더용 톤 만들기
-    const pageBg   = mixColor(base, accent, 0.28); // 제일 어두운 톤
-    const panelBg  = mixColor(base, accent, 0.40); // 카드 / 패널 배경
-    const headerBg = mixColor(base, accent, 0.52); // 위 큰 헤더 패널
-    const border   = mixColor(base, accent, 0.70); // 테두리
+    const pageBg   = mixColor(base, accent, 0.28);
+    const panelBg  = mixColor(base, accent, 0.40);
+    const headerBg = mixColor(base, accent, 0.52);
+    const border   = mixColor(base, accent, 0.70);
     const accentSoft = mixColor(accent, { r: 255, g: 255, b: 255 }, 0.18);
 
-    // 1) body 배경
     document.body.style.background = rgbToCss(pageBg);
 
-    // 2) 상단 네비게이션 바
     const topbar = document.querySelector('.topbar');
     if (topbar) {
       topbar.style.background = rgbToCss(panelBg);
       topbar.style.borderBottom = `1px solid ${rgbToCss(border, 0.7)}`;
-      topbar.style.boxShadow = `0 10px 30px ${rgbToCss(base, 0.85)}`;
+      topbar.style.boxShadow = `0 10px 30px rgba(0,0,0,.85)`;
     }
 
-    // 3) 패널(카드)들 배경 + 테두리
     document.querySelectorAll('.panel').forEach(panel => {
-      if (panel.id === 'headerSection') {
-        panel.style.background = rgbToCss(headerBg);
-      } else {
-        panel.style.background = rgbToCss(panelBg);
-      }
+      if (panel.id === 'headerSection') panel.style.background = rgbToCss(headerBg);
+      else panel.style.background = rgbToCss(panelBg);
       panel.style.border = `1px solid ${rgbToCss(border, 0.55)}`;
       panel.style.boxShadow = `0 20px 50px ${rgbToCss(accent, 0.35)}`;
     });
 
-    // 4) 전역 CSS 변수도 같이 바꾸기
-    //    (버튼, 배지 등 styles.css에서 --accent, --card를 쓰고 있을 거라서)
-    const rootStyle = document.documentElement.style;
-    rootStyle.setProperty('--bg', rgbToCss(pageBg));
-    rootStyle.setProperty('--bg-soft', rgbToCss(panelBg));
-    rootStyle.setProperty('--card', rgbToCss(panelBg));
-    rootStyle.setProperty('--accent', rgbToCss(accent));
-    rootStyle.setProperty('--accent-soft', rgbToCss(accentSoft));
-    rootStyle.setProperty('--border-subtle', rgbToCss(border, 0.55));
+    const root = document.documentElement.style;
+    root.setProperty('--bg', rgbToCss(pageBg));
+    root.setProperty('--bg-soft', rgbToCss(panelBg));
+    root.setProperty('--card', rgbToCss(panelBg));
+    root.setProperty('--accent', rgbToCss(accent));
+    root.setProperty('--accent-soft', rgbToCss(accentSoft));
+    root.setProperty('--border-subtle', rgbToCss(border, 0.55));
 
-
-    // 5) 버튼 색 테마에 맞게 조정
-
-    // (1) 기본 버튼들 - 위험 버튼(.btn-danger) 말고 전부
+    // 버튼 톤 정리
     document.querySelectorAll('.btn:not(.btn-danger)').forEach(btn => {
       btn.style.background = rgbToCss(panelBg);
       btn.style.borderColor = rgbToCss(border, 0.7);
       btn.style.boxShadow = `0 4px 12px ${rgbToCss(accent, 0.3)}`;
     });
-
-    // (2) 주요 버튼(전체 재생 같은 primary / play 버튼)은 테마색으로
     document.querySelectorAll('.btn.primary, .btn[data-role="play"]').forEach(btn => {
       btn.style.background = rgbToCss(accent);
       btn.style.borderColor = rgbToCss(accent);
       btn.style.color = '#fff';
     });
-
-    // (3) 상단 네비게이션 버튼도 살짝 강조
-    document.querySelectorAll('.topbar .btn').forEach(btn => {
-      btn.style.background = rgbToCss(panelBg);
-      btn.style.borderColor = rgbToCss(border, 0.7);
-    });
-
   }
 
   // ─────────────────────────────────────────
-  // API 호출
+  // API helpers
   // ─────────────────────────────────────────
   function buildCoverThumbs(items) {
-    const thumbs = (items || []).map(t => t.thumb).filter(Boolean).slice(0, 4);
-    return thumbs;
+    return (items || []).map(t => t.thumb).filter(Boolean).slice(0, 4);
   }
-
   async function fetchPlaylist() {
-    const res = await fetch(
-      `http://localhost:3001/api/playlists/${encodeURIComponent(playlistId)}`,
-      { credentials: 'include' }
-    );
-    if (!res.ok) throw new Error('playlist load fail');
-    return res.json();
+    const url = `http://localhost:3001/api/playlists/${encodeURIComponent(playlistId)}`;
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      const text = await res.text();
+      if (!res.ok) {
+        console.error('Playlist fetch failed:', res.status, text);
+        throw new Error(`HTTP ${res.status} - ${text || 'request failed'}`);
+      }
+      return JSON.parse(text);
+    } catch (e) {
+      console.error('fetchPlaylist error:', e);
+      throw e;
+    }
   }
-
   async function updateThemeColor(id, themeColor) {
     const res = await fetch(
       `http://localhost:3001/api/playlists/${encodeURIComponent(id)}/theme`,
@@ -295,11 +262,17 @@
       }
     );
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      const msg = data.error || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
+  }
+
+  // ─────────────────────────────────────────
+  // 재생 큐(해당 재생목록만) 저장 → player.html에서 사용
+  // ─────────────────────────────────────────
+  function setQueueFromPlaylist(pl, startIndex = 0) {
+    const q = (pl.items || []).map(t => t.track_id);
+    localStorage.setItem('playlistQueue', JSON.stringify(q));
+    localStorage.setItem('queueIndex', String(Math.max(0, Math.min(startIndex, q.length - 1))));
   }
 
   // ─────────────────────────────────────────
@@ -309,10 +282,7 @@
     const header = $('#headerSection');
     header.innerHTML = '';
 
-    // 이 재생목록의 테마 색 (없으면 기본 accent)
     let theme = pl.theme_color || '#22d3ee';
-
-    // ★ 페이지 전체 색 세트 적용 (body, topbar, panel, 버튼 등)
     applyPlaylistTheme(theme);
 
     const box = document.createElement('div');
@@ -324,24 +294,17 @@
     if (thumbs.length) {
       thumbs.forEach(src => {
         const img = document.createElement('img');
-        img.src = src;
-        img.alt = 'thumb';
+        img.src = src; img.alt = 'thumb';
         cover.appendChild(img);
       });
       while (cover.childElementCount < 4) {
-        const d = document.createElement('div');
-        d.style.background = '#020617';
-        cover.appendChild(d);
+        const d = document.createElement('div'); d.style.background = '#020617'; cover.appendChild(d);
       }
     } else {
       const d = document.createElement('div');
-      d.style.gridColumn = '1/3';
-      d.style.gridRow = '1/3';
-      d.style.display = 'flex';
-      d.style.alignItems = 'center';
-      d.style.justifyContent = 'center';
-      d.textContent = '🎵';
-      cover.appendChild(d);
+      d.style.gridColumn = '1/3'; d.style.gridRow = '1/3';
+      d.style.display = 'flex'; d.style.alignItems = 'center'; d.style.justifyContent = 'center';
+      d.textContent = '🎵'; cover.appendChild(d);
     }
 
     const meta = document.createElement('div');
@@ -352,47 +315,37 @@
     const sub = document.createElement('div');
     sub.className = 'plv-sub';
     sub.textContent =
-      `${pl.owner_name || '나'} · 트랙 ${(pl.items || []).length}개 `
-      + `· ♥ ${pl.likes || 0} · ${pl.is_public ? '공개' : '비공개'}`;
+      `${pl.owner_name || '나'} · 트랙 ${(pl.items || []).length}개 · ♥ ${pl.likes || 0} · ${pl.is_public ? '공개' : '비공개'}`;
 
     const controls = document.createElement('div');
     controls.className = 'plv-controls';
 
-    // ▶ 전체 재생 버튼 (accent 기반)
+    // ▶ 전체 재생
     const playBtn = document.createElement('button');
     playBtn.className = 'btn primary';
     playBtn.textContent = '▶ 전체 재생';
     playBtn.addEventListener('click', () => {
-      const first = (pl.items || [])[0];
-      if (!first) {
-        alert('재생할 곡이 없습니다.');
-        return;
-      }
-      localStorage.setItem('currentTrackId', first.track_id);
-      location.href = './player.html';
+      if (!pl.items?.length) return alert('재생할 곡이 없습니다.');
+      setQueueFromPlaylist(pl, 0);                         // (있어도 무방)
+      localStorage.setItem('currentTrackId', pl.items[0].track_id);
+      location.href = `./player.html?playlistId=${encodeURIComponent(pl.id)}`;
     });
 
-    // ❌ 재생목록 삭제 버튼
+    // ❌ 삭제
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'btn btn-danger';
     deleteBtn.textContent = '재생목록 삭제';
     deleteBtn.addEventListener('click', async () => {
       if (!confirm(`"${pl.title}" 재생목록을 삭제할까요?`)) return;
-
       try {
         const res = await API.deletePlaylist(pl.id);
-        if (res.ok) {
-          alert('재생목록이 삭제되었습니다.');
-          location.href = './playlist.html';
+        if (res.ok) { alert('삭제되었습니다.'); location.href = './playlist.html'; }
+        else if (res.error === 'login required' || res.status === 401) {
+          alert('로그인 후 이용해 주세요.'); location.href = './login.html?redirect=playlist';
+        } else if (res.error === 'forbidden' || res.status === 403) {
+          alert('삭제 권한이 없습니다.');
         } else {
-          if (res.error === 'login required' || res.status === 401) {
-            alert('로그인 후 이용해 주세요.');
-            location.href = './login.html?redirect=playlist';
-          } else if (res.error === 'forbidden' || res.status === 403) {
-            alert('이 재생목록은 삭제할 권한이 없습니다.');
-          } else {
-            alert('삭제 실패: ' + (res.error || '알 수 없는 오류'));
-          }
+          alert('삭제 실패: ' + (res.error || '알 수 없는 오류'));
         }
       } catch (e) {
         console.error('playlist delete error:', e);
@@ -400,34 +353,21 @@
       }
     });
 
-    // 🎨 테마 색 변경 UI
+    // 🎨 테마 색 변경
     const colorWrap = document.createElement('div');
     colorWrap.className = 'theme-color-wrap';
-
     const colorLabel = document.createElement('span');
-    colorLabel.className = 'sub';
-    colorLabel.style.opacity = '.85';
-    colorLabel.textContent = '테마 색';
-
+    colorLabel.className = 'sub'; colorLabel.style.opacity = '.85'; colorLabel.textContent = '테마 색';
     const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.value = theme;
-
+    colorInput.type = 'color'; colorInput.value = theme;
     const saveColorBtn = document.createElement('button');
-    saveColorBtn.className = 'btn';
-    saveColorBtn.textContent = '색 저장';
-
+    saveColorBtn.className = 'btn'; saveColorBtn.textContent = '색 저장';
     saveColorBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const newColor = colorInput.value || theme;
-
       try {
         await updateThemeColor(pl.id, newColor);
-
-        // 화면 전체 테마를 새 색으로 다시 적용
-        theme = newColor;
-        applyPlaylistTheme(theme);
-
+        theme = newColor; applyPlaylistTheme(theme);
         alert('테마 색이 저장되었습니다.');
       } catch (err) {
         console.error('update theme error:', err);
@@ -449,7 +389,6 @@
 
     box.appendChild(cover);
     box.appendChild(meta);
-
     header.appendChild(box);
   }
 
@@ -460,10 +399,7 @@
     const items = pl.items || [];
     if (!items.length) {
       list.innerHTML =
-        '<div class="sub" style="opacity:.7;padding:8px;">'
-        + '아직 이 재생목록에 곡이 없습니다. '
-        + '위의 "곡 추가하기" 버튼을 눌러 검색 화면에서 추가해 보세요.'
-        + '</div>';
+        '<div class="sub" style="opacity:.7;padding:8px;">아직 이 재생목록에 곡이 없습니다. 위의 "곡 추가하기" 버튼을 눌러 검색 화면에서 추가해 보세요.</div>';
       return;
     }
 
@@ -479,18 +415,14 @@
       const main = document.createElement('div');
       main.className = 'plv-track-main';
       const img = document.createElement('img');
-      img.src = t.thumb || '';
-      img.alt = 'thumb';
-
+      img.src = t.thumb || ''; img.alt = 'thumb';
       const texts = document.createElement('div');
       texts.style.minWidth = 0;
       texts.innerHTML = `
         <div class="plv-track-title">${t.title || ''}</div>
         <div class="plv-track-sub">${t.artist || ''} · ${t.source || ''}</div>
       `;
-
-      main.appendChild(img);
-      main.appendChild(texts);
+      main.appendChild(img); main.appendChild(texts);
 
       const right = document.createElement('div');
       right.style.textAlign = 'right';
@@ -500,17 +432,19 @@
       row.appendChild(main);
       row.appendChild(right);
 
+      // 개별 트랙 재생: 해당 인덱스부터 큐 시작
       row.addEventListener('click', (e) => {
         e.stopPropagation();
+        setQueueFromPlaylist(pl, idx);                       // (있어도 무방)
         localStorage.setItem('currentTrackId', t.track_id);
-        location.href = './player.html';
+        location.href = `./player.html?playlistId=${encodeURIComponent(pl.id)}`;
       });
 
       list.appendChild(row);
     });
   }
 
-  // 검색 화면으로 이동할 때 재생목록 id를 같이 넘김
+  // 검색으로 이동
   $('#goAddFromSearch').addEventListener('click', () => {
     location.href = `./search.html?addToPlaylist=${encodeURIComponent(playlistId)}`;
   });
@@ -522,11 +456,11 @@
       renderHeader(pl);
       renderTracks(pl);
     } catch (e) {
-      console.error(e);
-      alert('재생목록을 불러오지 못했습니다.');
+      alert('재생목록을 불러오지 못했습니다.\n' + (e?.message || ''));
       location.href = './playlist.html';
     }
   })();
 </script>
+
 </body>
 </html>

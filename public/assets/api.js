@@ -241,6 +241,7 @@ const API = (() => {
       return { ok: true, fallback: true };
     }
   }
+  
 
   // ✅ 내 재생목록 목록 (likes / liked / items 포함)
   async function playlists() {
@@ -413,5 +414,6 @@ const API = (() => {
     playlists, createPlaylist, addToPlaylist, removeFromPlaylist, deletePlaylist,
     playlistDetail, togglePlaylistLike,
     publicPlaylists,
+    playlistById: playlistDetail,
   };
 })();
