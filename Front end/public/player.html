@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Emotion Playlist · Player</title>
+  <link rel="stylesheet" href="./assets/styles.css"/>
+  <style>
+    .iframe-wrap{ position:relative; padding-top:56.25%; background:#000; }
+    .iframe-wrap > #player{ position:absolute; inset:0; }
+  </style>
+</head>
+<body data-mood="calm">
+  <header class="topbar">
+    <div class="brand">🎧 감상</div>
+    <nav class="nav">
+      <a href="./home.html" class="btn">홈</a>
+      <a href="./search.html" class="btn">검색</a>
+      <a href="./playlist.html" class="btn">재생목록</a>
+      <a href="./login.html" id="loginLink" class="btn">로그인</a>
+      <span id="userBadge" class="badge hidden"></span>
+      <button id="logoutBtn" class="btn hidden">로그아웃</button>
+    </nav>
+  </header>
+
+  <main class="grid">
+    <!-- 메인 플레이어 영역 -->
+    <section class="panel">
+      <div class="iframe-wrap">
+        <div id="player"></div>
+      </div>
+
+      <div class="controls">
+        <button id="playBtn" class="btn primary">재생</button>
+        <button id="pauseBtn" class="btn">일시정지</button>
+        <button id="addToPlaylistBtn" class="btn">재생목록에 추가</button>
+        <a id="openOnYT" class="btn" target="_blank" rel="noopener">YouTube에서 열기</a>
+      </div>
+
+      <div class="meta">
+        <img id="nowThumb" alt="thumb"/>
+        <div>
+          <div id="nowTitle" class="title">곡을 선택하세요</div>
+          <div id="nowSub" class="sub">아티스트 · 원본 제목</div>
+        </div>
+        <span id="nowSource" class="badge">–</span>
+      </div>
+
+      <!-- 이 곡에 대한 감정 평가 영역 -->
+      <div class="rating-block" style="margin-top:10px">
+        <div class="sub">
+          이 곡의 분위기를 골라주세요!
+          <span style="opacity:.75;font-size:0.9em;">(내 추천에 반영돼요)</span>
+        </div>
+        <div class="moods" id="rateMoods" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- 오른쪽 리스트: 추천 / 검색 결과 / 재생목록 곡 -->
+    <aside class="panel">
+      <div class="sub" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span id="sideTitle">추천</span>
+      </div>
+      <div id="recList" class="list"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <a id="moreRecsBtn" class="btn">다른 곡도 추천받기 →</a>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 재생 종료 후 팝업 -->
+  <div id="afterPopup" class="modal hidden">
+    <div class="box">
+      <div class="title" style="margin-bottom:8px">
+        이 곡을 듣고 난 지금 기분은?
+      </div>
+      <div class="sub" style="margin-bottom:8px">
+        선택한 감정이 앞으로 추천에 사용돼요.
+      </div>
+      <div id="afterMoods" class="moods"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <a class="btn" href="./home.html">심리테스트 다시 하기</a>
+        <button id="closePopup" class="btn primary">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 순서 중요: API(IIFE) → auth 헤더 → YouTube API → 페이지 스크립트 -->
+  <script src="./assets/api.js"></script>
+  <script src="./assets/auth.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    // ────────────────────────── 유틸 & 상태
+    const $ = (s) => document.querySelector(s);
+    const MOODS = API.MOODS;
+
+    const urlParams     = new URLSearchParams(location.search);
+    const initialMood   = urlParams.get('mood')   || 'calm';
+    const initialGenre  = urlParams.get('genre')  || '';
+    const initialNation = urlParams.get('nation') || '';
+    const initialSub    = urlParams.get('sub')    || '';
+    const initialTone   = urlParams.get('tone')   || '';
+    const fromParam     = urlParams.get('from')   || '';
+    const playlistIdParam = urlParams.get('playlistId') || urlParams.get('id') || '';
+
+    // body에 기본 mood 적용
+    document.body.setAttribute('data-mood', initialMood);
+
+    // 모드: recs / search / playlist
+    let mode = 'recs';
+    let ytPlayer = null;
+    let currentTrack = null;
+    let currentParams = {
+      mood: initialMood,
+      genre: initialGenre,
+      nation: initialNation,
+      sub: initialSub,
+      tone:   initialTone,
+    };
+
+    // 큐(검색 결과나 재생목록 곡들)
+    let queue = [];
+    let queueIndex = -1;
+
+    // ★★★ 스킵 판단용 전역 상태
+    let currentTrackId = null;  // 현재 재생 중인 트랙 id
+    let playStartMs    = null;  // 이 트랙을 재생하기 시작한 시각(ms)
+
+    // 로그인 필요한 동작 감싸기
+    async function gate(fn, { silent = false } = {}) {
+      try {
+        const { user } = await API.me();
+        if (!user) {
+          if (!silent) {
+            alert('로그인 후 이용 가능한 기능입니다.');
+          }
+          return;
+        }
+        await fn();
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    const cleanTitle = (s) => (s || '')
+      .replace(/\s*\([^\)]*\)|\s*\[[^\]]*\]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    // YouTube ID를 끝까지 뽑아내는 총력 파서
+    function getYouTubeId(track) {
+      if (!track) return '';
+
+      // 후보 문자열들을 한데 모아놓고 하나씩 검사
+      const candidates = [
+        track.id,
+        track.track_id,
+        track.videoId,
+        track.video_id,
+        track.url,
+        track.source,
+        track.original_title,
+        track.originalTitle,
+        track.thumb   // ★ 썸네일에서도 /vi/ID/ 뽑아냄
+      ].filter(Boolean);
+
+      for (const v of candidates) {
+        if (typeof v !== 'string') continue;
+
+        // 1) "youtube:XXXXXXXXXXX"
+        if (v.startsWith('youtube:')) {
+          const x = v.split(':')[1];
+          if (x && /^[\w-]{6,}$/.test(x)) return x;
+        }
+
+        // 2) 썸네일 경로: https://i.ytimg.com/vi/<ID>/...
+        const mThumb = /\/vi\/([\w-]{6,})\//i.exec(v);
+        if (mThumb) return mThumb[1];
+
+        // 3) URL: ...?v=<ID> 또는 .../be/<ID>
+        const mUrl = /(?:v=|be\/)([\w-]{6,})/i.exec(v);
+        if (mUrl) return mUrl[1];
+
+        // 4) 11자 내외의 “그럴듯한” 순수 ID
+        if (/^[\w-]{10,}$/.test(v)) return v;
+      }
+
+      return '';
+    }
+
+    // ★★★ 5초 이하 스킵시 /api/skip 호출
+    async function sendSkipIfNeeded() {
+      // 아직 재생 중인 곡이 없거나, 시작 시간이 없으면 패스
+      if (!currentTrackId || playStartMs == null) return;
+
+      const listenedSec = (Date.now() - playStartMs) / 1000;
+      // 5초 초과면 "정상 청취"로 보고 스킵 X
+      if (listenedSec > 5) return;
+
+      try {
+        await fetch('http://localhost:3001/api/skip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            trackId: currentTrackId,
+            seconds: listenedSec,
+          }),
+        });
+      } catch (err) {
+        console.error('skip 기록 실패:', err);
+      }
+    }
+
+    // ────────────────────────── YouTube Iframe API
+    window.onYouTubeIframeAPIReady = function () {
+      ytPlayer = new YT.Player('player', {
+        height: '100%',
+        width: '100%',
+        videoId: '',
+        playerVars: { autoplay: 0, rel: 0, modestbranding: 1 },
+        events: {
+          onReady: onReady,
+          onStateChange: onStateChange,
+          onError: onError
+        }
+      });
+    };
+
+    async function onReady() {
+
+      currentParams = {
+        mood:   initialMood,
+        genre:  initialGenre,
+        nation: initialNation,
+        sub:    initialSub,
+        tone:   initialTone,
+      };
+
+      // body mood 업데이트
+      document.body.setAttribute('data-mood', currentParams.mood);
+
+      const from = fromParam;
+      const pid  = playlistIdParam;
+
+      if (pid) {
+        // 재생목록에서 진입
+        mode = 'playlist';
+        await initFromPlaylist(pid);
+
+      } else if (from === 'search') {
+        // 검색 결과에서 진입
+        mode = 'search';
+        await initFromSearch();
+
+      } else {
+        // 기본 추천 모드
+        mode = 'recs';
+        await refreshRecs();
+      }
+    }
+
+
+    function onStateChange(e) {
+      if (e.data === YT.PlayerState.ENDED) {
+        showEndPopup();
+      }
+    }
+
+    function onError(e){
+      console.warn('YouTube player error:', e.data);
+
+      // 유튜브 정책 때문에 임베드가 막힌 경우 코드 101, 150
+      if (e.data === 101 || e.data === 150) {
+        const link = document.getElementById('openOnYT');
+        const msg =
+          '이 영상은 유튜브에서 외부 사이트 재생이 막혀 있어서,\n' +
+          '사이트 안에서는 재생할 수 없어요.\n\n' +
+          '새 탭에서 YouTube로 바로 열까요?';
+
+        if (link && link.href && link.href !== '#' && confirm(msg)) {
+          window.open(link.href, '_blank');   // 사용자가 원할 때만 이동
+        }
+      }
+    }
+
+    // ────────────────────────── 추천 모드: 감정 기반 추천
+    async function refreshRecs(){
+      const { mood, genre, nation, sub, tone } = currentParams;
+      let items = [];
+      try{
+        const r = await API.recs({ mood, genre, nation, sub, tone });
+        items = r.items || [];
+      }catch{
+        items = API.list();
+      }
+
+      const holder = $('#recList');
+      holder.innerHTML = '';
+      $('#sideTitle').textContent = '추천';
+
+      items.forEach(t=>{
+        const el = document.createElement('div');
+        el.className = 'item';
+        const thumb = t.thumb || '';
+        el.innerHTML = `
+          <img src="${thumb}" alt="thumb"/>
+          <div>
+            <div class="title">${cleanTitle(t.title || '')}</div>
+            <div class="sub">${t.artist || ''} · <span class="badge">${t.source || ''}</span></div>
+          </div>
+        `;
+        el.onclick = ()=> setNow(t);
+        holder.appendChild(el);
+      });
+
+      if (!currentTrack && items[0]) setNow(items[0]);
+    }
+
+    // ────────────────────────── 검색 결과 모드
+    async function initFromSearch() {
+      const p = new URLSearchParams(location.search);
+      const idParam = p.get('id');
+
+      // lastSearchList 불러오기
+      let list = [];
+      try {
+        const saved = localStorage.getItem('lastSearchList');
+        if (saved) list = JSON.parse(saved) || [];
+      } catch (e) {
+        console.warn('failed to parse lastSearchList', e);
+      }
+
+      if (!Array.isArray(list) || list.length === 0) {
+        // 폴백: 추천 모드로
+        mode = 'recs';
+        await refreshRecs();
+        return;
+      }
+
+      // context(감정/장르/국가)도 있으면 반영
+      try {
+        const ctxStr = localStorage.getItem('lastSearchContext');
+        if (ctxStr) {
+          const ctx = JSON.parse(ctxStr);
+          if (ctx.mood)   currentParams.mood   = ctx.mood;
+          if (ctx.genre)  currentParams.genre  = ctx.genre;
+          if (ctx.nation) currentParams.nation = ctx.nation;
+          document.body.setAttribute('data-mood', currentParams.mood);
+        }
+      } catch (e) {
+        console.warn('failed to parse lastSearchContext', e);
+      }
+
+      queue = list;
+      const idx = list.findIndex(x => String(x.id) === String(idParam));
+      queueIndex = idx >= 0 ? idx : 0;
+
+      $('#sideTitle').textContent = '검색 결과';
+      renderQueueList();
+      setNow(queue[queueIndex]);
+    }
+
+    // ────────────────────────── 재생목록 모드
+    async function initFromPlaylist(pid) {
+      const holderTitle = $('#sideTitle');
+      if (holderTitle) holderTitle.textContent = '재생목록';
+
+      try {
+        const { items } = await API.playlists(); // 내 재생목록들만
+        const pl = (items || []).find(x => String(x.id) === String(pid));
+
+        if (!pl) {
+          // 못 찾으면 그냥 추천 모드
+          mode = 'recs';
+          await refreshRecs();
+          return;
+        }
+
+        const tracks = pl.items || [];
+        if (!tracks.length) {
+          mode = 'recs';
+          await refreshRecs();
+          return;
+        }
+
+        queue = tracks;
+        queueIndex = 0;
+
+        if (holderTitle) holderTitle.textContent = `재생목록 · ${pl.title}`;
+
+        renderQueueList();
+        setNow(queue[queueIndex]);
+      } catch (e) {
+        console.warn('initFromPlaylist failed', e);
+        mode = 'recs';
+        await refreshRecs();
+      }
+    }
+
+    // 큐(검색/재생목록) 리스트 렌더링
+    function renderQueueList() {
+      const holder = $('#recList');
+      holder.innerHTML = '';
+
+      queue.forEach((t, idx) => {
+        const el = document.createElement('div');
+        el.className = 'item';
+        const thumb = t.thumb || '';
+        el.innerHTML = `
+          <img src="${thumb}" alt="thumb"/>
+          <div>
+            <div class="title">${cleanTitle(t.title || '')}</div>
+            <div class="sub">${t.artist || ''} · <span class="badge">${t.source || ''}</span></div>
+          </div>
+        `;
+        el.onclick = () => {
+          queueIndex = idx;
+          setNow(t);
+        };
+        holder.appendChild(el);
+      });
+    }
+
+    // ────────────────────────── 현재 곡 설정
+    function setNow(t) {
+      if (!t) return;
+
+      // 이전 곡과 다른 곡으로 바뀔 때만 스킵 기록
+      const prevId = (currentTrack && (currentTrack.id || currentTrack.track_id)) || null;
+      const nextId = t.id || t.track_id || null;
+      if (prevId && nextId && prevId !== nextId) {
+        sendSkipIfNeeded();  // fire-and-forget
+      }
+
+      currentTrack = t;
+      currentTrackId = nextId;        // ★ 통일된 현재 곡 id
+      playStartMs = Date.now();
+
+      const vid = getYouTubeId(t);
+      // ★ 방어: vid 없으면 loadVideoById 호출하지 말고 안내 + 콘솔 로깅
+      if (ytPlayer && ytPlayer.loadVideoById) {
+        if (vid) {
+          ytPlayer.loadVideoById(String(vid));
+        } else {
+          console.warn('[player] 유튜브 ID를 찾지 못함. track=', t);
+          alert('이 트랙의 YouTube ID를 찾지 못했어요. 다음 곡을 선택해 보세요.');
+        }
+      }
+
+      $('#nowThumb').src = t.thumb || '';
+      $('#nowTitle').textContent = cleanTitle(t.title || '');
+      $('#nowSub').textContent = `${t.artist || ''} · ${(t.original_title || t.originalTitle || '')}`;
+      $('#nowSource').textContent = t.source || 'YouTube';
+      $('#openOnYT').href = t.url || (vid ? `https://www.youtube.com/watch?v=${vid}` : '#');
+
+      renderRateChips();
+
+      // 시청기록(로그인 필요, 실패는 조용히)
+      gate(async () => { if (currentTrackId) await API.watch(currentTrackId); }, { silent: true });
+    }
+
+
+    // 이 곡에 대한 감정 평가 버튼들
+    function renderRateChips() {
+      const box = $('#rateMoods');
+      box.innerHTML = '';
+      MOODS.forEach(m => {
+        const b = document.createElement('button');
+        b.className = 'chip rate-chip';
+        b.textContent = m.label;
+        b.onclick = () => gate(async () => {
+          await API.rate(currentTrackId || currentTrack.id || currentTrack.track_id, m.key);
+          currentParams.mood = m.key;                  // 현재 mood 변경
+          document.body.setAttribute('data-mood', m.key);
+          // 추천 모드일 때만 추천 갱신
+          if (mode === 'recs') {
+            await refreshRecs();
+          }
+          alert(`"${m.label}"로 이 곡의 기분을 저장했어요.`);
+        });
+        box.appendChild(b);
+      });
+    }
+
+    // 재생 끝났을 때 팝업
+    function showEndPopup() {
+      const wrap = $('#afterPopup');
+      const holder = $('#afterMoods');
+      holder.innerHTML = '';
+      MOODS.forEach(m => {
+        const b = document.createElement('button');
+        b.className = 'chip rate-chip';
+        b.textContent = m.label;
+        b.onclick = () => gate(async () => {
+          await API.rate(currentTrackId || currentTrack.id || currentTrack.track_id, m.key);
+          currentParams.mood = m.key;
+          document.body.setAttribute('data-mood', m.key);
+          wrap.classList.add('hidden');
+          if (mode === 'recs') {
+            await refreshRecs();
+          }
+        });
+        holder.appendChild(b);
+      });
+      wrap.classList.remove('hidden');
+      $('#closePopup').onclick = () => wrap.classList.add('hidden');
+    }
+
+    // ────────────────────────── 버튼들
+    $('#playBtn').onclick = () => { try { ytPlayer.playVideo(); } catch { } };
+    $('#pauseBtn').onclick = () => { try { ytPlayer.pauseVideo(); } catch { } };
+
+    $('#addToPlaylistBtn').onclick = () => gate(async () => {
+      if (!currentTrack) return;
+      let { items } = await API.playlists().catch(() => ({ items: [] }));
+      // 없으면 하나 생성
+      if (!items || !items[0]) {
+        const created = await API.createPlaylist({ title: '내 재생목록', isPublic: false });
+        items = [{ id: created.id, title: '내 재생목록' }];
+      }
+      await API.addToPlaylist({
+        playlistId: items[0].id,
+        trackId: currentTrack.id,
+        position: 0
+      });
+      alert('재생목록에 추가했습니다.');
+    });
+
+    $('#moreRecsBtn').onclick = ()=> {
+      const { mood, genre, nation, tone, sub } = currentParams;
+      const sp = new URLSearchParams();
+      if (mood)  sp.set('mood',  mood);
+      if (genre) sp.set('genre', genre);
+      if (nation)sp.set('nation',nation);
+      if (tone)  sp.set('tone',  tone);  
+      if (sub)   sp.set('sub',   sub);  
+      location.href = `./search.html?${sp.toString()}`;
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Emotion Playlist · Playlist</title>
+
+  <link rel="stylesheet" href="./assets/styles.css"/>
+
+  <style>
+    /* ================================
+       1. 상단 플레이리스트 정보 박스 (헤더 영역)
+       ================================ */
+    #headerSection{
+      /* 박스의 모서리를 18px만큼 둥글게 깎습니다. */
+      border-radius:18px;
+      /* 박스 밖으로 튀어나가는 내용은 안 보이게 숨깁니다. */
+      overflow:hidden;
+      /* 배경색 설정: --panel 변수가 있으면 쓰고, 없으면 진한 남색(rgba)을 씁니다. */
+      background: var(--panel, rgba(15,23,42,0.98));
+      /* 테두리는 아주 얇고 투명한 회색 실선으로 설정합니다. */
+      border:1px solid rgba(148,163,184,0.25);
+      /* 테두리색, 그림자, 배경색이 변할 때 0.2초 동안 부드럽게 바뀌도록 합니다. */
+      transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+    }
+
+    /* 자바스크립트로 테마가 적용되었을 때(.theme-colored 클래스 추가 시) 스타일 */
+    #headerSection.theme-colored{
+      /* 박스 그림자를 크고 진하게 줘서 공중에 뜬 느낌을 줍니다. */
+      box-shadow:0 22px 60px rgba(0,0,0,.75);
+    }
+
+    /* ================================
+       2. 전체 레이아웃 (감싸는 컨테이너)
+       ================================ */
+    .plv-wrap {
+      /* 내부 요소들을 유연하게 배치하는 Flexbox 모드를 켭니다. */
+      display:flex;
+      /* 요소들을 가로가 아닌 세로 방향(위->아래)으로 쌓습니다. */
+      flex-direction:column;
+      /* 요소들 사이의 간격을 16px로 벌립니다. */
+      gap:16px;
+      /* 컨테이너 안쪽 여백을 16px 줍니다. */
+      padding:16px;
+    }
+
+    /* 플레이리스트 상단 정보 (커버이미지 + 텍스트) 레이아웃 */
+    .plv-header {
+      /* 가로 배치를 위해 Flexbox를 사용합니다. */
+      display:flex;
+      /* 커버와 텍스트 사이 간격을 20px 줍니다. */
+      gap:20px;
+      /* 내용물들을 아래쪽 라인(바닥)에 맞춰 정렬합니다. */
+      align-items:flex-end;
+    }
+
+    /* ================================
+       3. 앨범 커버 이미지 (2x2 격자 모양)
+       ================================ */
+    .plv-cover {
+      /* 너비를 180px로 고정합니다. */
+      width:180px;
+      /* 높이도 180px로 고정합니다. (정사각형) */
+      height:180px;
+      /* 모서리를 16px 둥글게 합니다. */
+      border-radius:16px;
+      /* 이미지가 없을 때 뒤에 보일 배경색(아주 어두운 색)입니다. */
+      background:#020617;
+      /* 둥근 모서리 밖으로 이미지가 튀어나가지 않게 자릅니다. */
+      overflow:hidden;
+
+      /* 내부 이미지를 2x2 바둑판 모양으로 배치하기 위해 Grid를 씁니다. */
+      display:grid;
+      /* 가로로 2칸을 똑같은 비율(1fr)로 만듭니다. */
+      grid-template-columns:repeat(2,1fr);
+      /* 세로로 2칸을 똑같은 비율(1fr)로 만듭니다. */
+      grid-template-rows:repeat(2,1fr);
+      /* 이미지 사이의 틈을 2px 줍니다. */
+      gap:2px;
+
+      /* 화면이 좁아져도 이 커버 박스는 찌그러지지 않게 고정합니다. */
+      flex-shrink:0;
+    }
+
+    /* 커버 안의 이미지 태그 스타일 */
+    .plv-cover img {
+      /* 너비를 부모 칸에 꽉 차게(100%) 합니다. */
+      width:100%;
+      /* 높이를 부모 칸에 꽉 차게(100%) 합니다. */
+      height:100%;
+      /* 비율이 안 맞아도 꽉 차게 보이도록(잘리더라도) 설정합니다. */
+      object-fit:cover;
+    }
+
+    /* 플레이리스트 제목 텍스트 스타일 */
+    .plv-title {
+      /* 글자 크기를 28px로 크게 합니다. */
+      font-size:28px;
+      /* 글자 굵기를 굵게(700) 설정합니다. */
+      font-weight:700;
+      /* 아래쪽 여백을 4px 줍니다. */
+      margin-bottom:4px;
+    }
+
+    /* 부가 정보(곡 수, 좋아요 등) 텍스트 스타일 */
+    .plv-sub {
+      /* 글자 크기를 13px로 작게 합니다. */
+      font-size:13px;
+      /* 투명도를 0.7로 줘서 약간 흐릿하게(덜 강조되게) 합니다. */
+      opacity:.7;
+    }
+
+    /* 버튼들이 모여있는 영역 스타일 */
+    .plv-controls {
+      /* 버튼들을 가로로 배치합니다. */
+      display:flex;
+      /* 공간이 부족하면 다음 줄로 넘어가게 합니다. */
+      flex-wrap:wrap;
+      /* 버튼 사이 간격을 8px 줍니다. */
+      gap:8px;
+      /* 위쪽 여백을 12px 줍니다. */
+      margin-top:12px;
+      /* 버튼들의 세로 중앙을 맞춥니다. */
+      align-items:center;
+    }
+
+    /* ================================
+       4. 노래 목록 리스트 (한 줄 스타일)
+       ================================ */
+    .plv-track-row {
+      /* 내부 배치를 위해 Grid를 사용합니다. */
+      display:grid;
+
+      /* 3칸으로 나눕니다: [번호 24px] [제목/가수 (남은공간 전부)] [오른쪽버튼 80px] */
+      grid-template-columns:24px minmax(0,1fr) 80px;
+      /* 각 칸 사이 간격을 8px 줍니다. */
+      gap:8px;
+      /* 세로 방향 가운데 정렬합니다. */
+      align-items:center;
+
+      /* 안쪽 여백: 위아래 6px, 좌우 10px */
+      padding:6px 10px;
+      /* 모서리를 8px 둥글게 합니다. */
+      border-radius:8px;
+      /* 마우스를 올리면 클릭 가능한 손가락 모양 커서가 됩니다. */
+      cursor:pointer;
+    }
+
+    /* 트랙 한 줄에 마우스를 올렸을 때(hover) 스타일 */
+    .plv-track-row:hover {
+      /* 배경색을 연한 회색으로 바꿔서 선택된 느낌을 줍니다. */
+      background:rgba(148,163,184,.10);
+    }
+
+    /* 노래 정보(앨범아트 + 텍스트)를 묶는 박스 */
+    .plv-track-main {
+      /* 가로 배치를 합니다. */
+      display:flex;
+      /* 이미지와 글자 사이 간격을 10px 줍니다. */
+      gap:10px;
+      /* 세로 중앙 정렬합니다. */
+      align-items:center;
+      /* 글자가 넘칠 때 말줄임표(...) 처리를 위해 최소 너비를 0으로 잡습니다. */
+      min-width:0;
+    }
+
+    /* 리스트 안의 작은 앨범 이미지 */
+    .plv-track-main img {
+      /* 너비 44px */
+      width:44px;
+      /* 높이 44px */
+      height:44px;
+      /* 모서리 둥글게 */
+      border-radius:8px;
+      /* 비율 유지하며 꽉 채우기 */
+      object-fit:cover;
+      /* 이미지가 찌그러지지 않게 고정 */
+      flex-shrink:0;
+    }
+
+    /* 노래 제목 스타일 */
+    .plv-track-title {
+      /* 글자 크기 14px */
+      font-size:14px;
+
+      /* 제목이 길어지면 줄바꿈 하지 않고 한 줄로 표시합니다. */
+      white-space:nowrap;
+      /* 넘치는 글자는 안 보이게 숨깁니다. */
+      overflow:hidden;
+      /* 잘린 부분 끝에 '...'을 붙여줍니다. */
+      text-overflow:ellipsis;
+    }
+
+    /* 가수 이름 등 보조 텍스트 스타일 */
+    .plv-track-sub {
+      /* 글자 크기 12px */
+      font-size:12px;
+      /* 투명도를 줘서 흐리게 표시 */
+      opacity:.7;
+    }
+
+    /* ================================
+       5. 테마 색상 고르는 UI 스타일
+       ================================ */
+    .theme-color-wrap{
+      /* 가로 배치 */
+      display:flex;
+      /* 세로 중앙 정렬 */
+      align-items:center;
+      /* 간격 6px */
+      gap:6px;
+      /* 글자 크기 12px */
+      font-size:12px;
+    }
+    /* 색상 선택기(input type="color") 디자인 커스텀 */
+    .theme-color-wrap input[type="color"]{
+      /* 너비 28px */
+      width:28px;
+      /* 높이 28px */
+      height:28px;
+      /* 완전 동그라미로 만듭니다. */
+      border-radius:50%;
+      /* 기본 테두리 제거 */
+      border:none;
+      /* 안쪽 여백 제거 */
+      padding:0;
+      /* 배경 투명하게 */
+      background:transparent;
+      /* 마우스 올리면 손가락 커서 */
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body data-mood="calm">
+<header class="topbar">
+  <div class="brand">📂 재생목록</div>
+  <nav class="nav">
+    <a href="./home.html" class="btn">홈</a>
+    <a href="./search.html" class="btn">검색</a>
+    <a href="./playlist.html" class="btn">재생목록</a>
+    <a href="./login.html" id="loginLink" class="btn">로그인</a>
+    <span id="userBadge" class="badge hidden"></span>
+    <button id="logoutBtn" class="btn hidden">로그아웃</button>
+  </nav>
+</header>
+
+<main class="plv-wrap">
+  <section id="headerSection" class="panel">
+    </section>
+
+  <section class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="sub">트랙 목록</div>
+      <button id="goAddFromSearch" class="btn">곡 추가하기 (검색으로 이동)</button>
+    </div>
+    <div id="trackList">
+    </div>
+  </section>
+</main>
+
+<script src="./assets/api.js"></script>
+<script src="./assets/auth.js"></script>
+<script>
+  // document.querySelector를 매번 쓰기 귀찮아서 $로 줄여 씁니다.
+  const $ = (s) => document.querySelector(s);
+  // 현재 페이지 주소창의 파라미터(?id=...)를 읽어오는 도구입니다.
+  const searchParams = new URLSearchParams(location.search);
+  // 주소에서 'id' 값(플레이리스트 ID)을 가져옵니다.
+  const playlistId = searchParams.get('id');
+
+  // 만약 ID가 없다면 (잘못 들어온 경우)
+  if (!playlistId) {
+    // 경고창을 띄우고
+    alert('잘못된 접근입니다.');
+    // 목록 페이지로 강제로 이동시킵니다.
+    location.href = './playlist.html';
+  }
+
+  // ─────────────────────────────────────────
+  // [색상 계산 도구] 
+  // ─────────────────────────────────────────
+  
+  // 16진수 색상 코드(#ffffff)를 RGB 숫자({r,g,b}) 객체로 변환하는 함수
+  function hexToRgb(hex) {
+    // 만약 색상 코드가 없으면 흰색(255,255,255)을 반환합니다.
+    if (!hex) return { r: 255, g: 255, b: 255 };
+    // 앞에 붙은 '#' 기호를 제거합니다.
+    let c = hex.replace('#', '').trim();
+    // 만약 #abc 처럼 3자리 코드라면 #aabbcc 처럼 6자리로 늘려줍니다.
+    if (c.length === 3) {
+      c = c.split('').map(ch => ch + ch).join('');
+    }
+    // 16진수 문자열을 10진수 숫자로 변환합니다.
+    const num = parseInt(c, 16);
+    // 비트 연산을 통해 빨강(R), 초록(G), 파랑(B) 값을 추출해서 반환합니다.
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255,
+    };
+  }
+
+  // RGB 숫자 객체를 CSS 문자열 'rgb(r,g,b)' 형태로 바꿔주는 함수
+  function rgbToCss({ r, g, b }, alpha) {
+    // 만약 투명도(alpha) 값이 숫자로 들어왔다면 rgba 형식으로 반환합니다.
+    if (typeof alpha === 'number') {
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+    // 아니면 일반 rgb 형식으로 반환합니다.
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // 두 가지 색(base, accent)을 특정 비율(ratio)로 섞는 함수입니다.
+  // ratio가 0이면 base색, 1이면 accent색이 됩니다.
+  function mixColor(base, accent, ratio) {
+    // 비율이 0보다 작거나 1보다 크지 않도록 범위를 조절합니다.
+    const t = Math.max(0, Math.min(1, ratio));
+    // 각 색상 성분(R,G,B)별로 비율에 맞춰 계산(보간)하여 반환합니다.
+    return {
+      r: Math.round(base.r + (accent.r - base.r) * t),
+      g: Math.round(base.g + (accent.g - base.g) * t),
+      b: Math.round(base.b + (accent.b - base.b) * t),
+    };
+  }
+
+  // ─────────────────────────────────────────
+  // [테마 적용] 선택한 색상으로 페이지 전체 분위기를 바꾸는 핵심 함수
+  // ─────────────────────────────────────────
+  function applyPlaylistTheme(themeHex) {
+    // 입력받은 테마색을 RGB로 변환합니다. (값이 없으면 기본 청록색 사용)
+    const accent = hexToRgb(themeHex || '#22d3ee');
+
+    // 페이지의 기본 바탕이 될 어두운 색(네이비)을 정의합니다.
+    const base = { r: 3, g: 7, b: 18 };
+
+    // 기본색과 테마색을 섞어서 여러 단계의 톤(Palette)을 만듭니다.
+    // 1. 전체 배경색 (가장 어둡게)
+    const pageBg   = mixColor(base, accent, 0.28); 
+    // 2. 카드/패널 배경색 (조금 덜 어둡게)
+    const panelBg  = mixColor(base, accent, 0.40); 
+    // 3. 헤더 섹션 배경색 (약간 밝게)
+    const headerBg = mixColor(base, accent, 0.52); 
+    // 4. 테두리 선 색상
+    const border   = mixColor(base, accent, 0.70); 
+    // 5. 테마색을 흰색과 섞어서 부드럽게 만든 색
+    const accentSoft = mixColor(accent, { r: 255, g: 255, b: 255 }, 0.18);
+
+    // 1) 전체 페이지(body)의 배경색을 변경합니다.
+    document.body.style.background = rgbToCss(pageBg);
+
+    // 2) 상단 네비게이션 바(.topbar)의 스타일을 변경합니다.
+    const topbar = document.querySelector('.topbar');
+    if (topbar) {
+      // 배경색 변경
+      topbar.style.background = rgbToCss(panelBg);
+      // 아래쪽 테두리 색 변경
+      topbar.style.borderBottom = `1px solid ${rgbToCss(border, 0.7)}`;
+      // 그림자 색 변경
+      topbar.style.boxShadow = `0 10px 30px ${rgbToCss(base, 0.85)}`;
+    }
+
+    // 3) 모든 패널(.panel) 요소들의 스타일을 변경합니다.
+    document.querySelectorAll('.panel').forEach(panel => {
+      // 만약 헤더 섹션이라면 전용 배경색을 씁니다.
+      if (panel.id === 'headerSection') {
+        panel.style.background = rgbToCss(headerBg);
+      } else {
+        // 일반 패널이라면 일반 배경색을 씁니다.
+        panel.style.background = rgbToCss(panelBg);
+      }
+      // 테두리 색을 변경합니다.
+      panel.style.border = `1px solid ${rgbToCss(border, 0.55)}`;
+      // 그림자를 테마색 느낌으로 은은하게 줍니다.
+      panel.style.boxShadow = `0 20px 50px ${rgbToCss(accent, 0.35)}`;
+    });
+
+    // 4) CSS 변수(variable) 값들도 업데이트합니다.
+    // 이렇게 하면 CSS 파일에 있는 다른 요소들도 색상이 같이 바뀝니다.
+    const rootStyle = document.documentElement.style;
+    // 배경색 변수 업데이트
+    rootStyle.setProperty('--bg', rgbToCss(pageBg));
+    // 부드러운 배경색 변수 업데이트
+    rootStyle.setProperty('--bg-soft', rgbToCss(panelBg));
+    // 카드 배경색 변수 업데이트
+    rootStyle.setProperty('--card', rgbToCss(panelBg));
+    // 강조색(테마색) 변수 업데이트
+    rootStyle.setProperty('--accent', rgbToCss(accent));
+    // 부드러운 강조색 변수 업데이트
+    rootStyle.setProperty('--accent-soft', rgbToCss(accentSoft));
+    // 옅은 테두리 색 변수 업데이트 (여기서 코드가 끝남)
+    rootStyle.setProperty('--border-subtle', rgbToCss(border, 0.55));
+
+// 5) 버튼 색 테마에 맞게 조정 (이전 코드에서 이어지는 부분입니다)
+
+    // (1) 기본 버튼들 - 위험 버튼(.btn-danger, 삭제 등)은 제외하고 전부 선택합니다.
+    document.querySelectorAll('.btn:not(.btn-danger)').forEach(btn => {
+      // 버튼의 배경색을 패널 배경색(panelBg)과 똑같이 맞춥니다.
+      btn.style.background = rgbToCss(panelBg);
+      // 버튼 테두리 색을 설정하되, 투명도를 0.7로 주어 은은하게 만듭니다.
+      btn.style.borderColor = rgbToCss(border, 0.7);
+      // 버튼에 그림자를 주는데, 테마 강조색(accent)을 섞어 분위기를 맞춥니다.
+      btn.style.boxShadow = `0 4px 12px ${rgbToCss(accent, 0.3)}`;
+    });
+
+    // (2) 주요 버튼(전체 재생 같은 primary 버튼이나 재생 아이콘 버튼)은 눈에 띄게 꾸밉니다.
+    document.querySelectorAll('.btn.primary, .btn[data-role="play"]').forEach(btn => {
+      // 배경색을 테마 강조색(accent)으로 칠해 눈에 확 띄게 합니다.
+      btn.style.background = rgbToCss(accent);
+      // 테두리도 같은 색으로 맞춥니다.
+      btn.style.borderColor = rgbToCss(accent);
+      // 글자색은 흰색으로 해서 잘 보이게 합니다.
+      btn.style.color = '#fff';
+    });
+
+    // (3) 상단 네비게이션 바에 있는 버튼들도 스타일을 통일합니다.
+    document.querySelectorAll('.topbar .btn').forEach(btn => {
+      // 배경색을 패널색으로 바꿉니다.
+      btn.style.background = rgbToCss(panelBg);
+      // 테두리 색을 설정합니다.
+      btn.style.borderColor = rgbToCss(border, 0.7);
+    });
+
+  } // applyPlaylistTheme 함수 끝
+
+  // ─────────────────────────────────────────
+  // API 호출: 서버와 데이터를 주고받는 함수들
+  // ─────────────────────────────────────────
+  
+  // 재생목록 아이템들 중에서 앨범 커버(썸네일) 이미지 주소만 뽑아내는 함수입니다.
+  function buildCoverThumbs(items) {
+    // items 배열을 돌면서 thumb 속성만 가져옵니다.
+    // .filter(Boolean)으로 빈 값(null, undefined)은 버립니다.
+    // .slice(0, 4)로 최대 4개까지만 자릅니다. (2x2 격자를 위해)
+    const thumbs = (items || []).map(t => t.thumb).filter(Boolean).slice(0, 4);
+    // 정리된 썸네일 배열을 반환합니다.
+    return thumbs; 
+  }
+
+  // 서버에서 현재 재생목록의 상세 정보를 가져오는 비동기 함수입니다.
+  async function fetchPlaylist() {
+    // playlistId를 사용해 API 주소를 만듭니다. (특수문자 처리를 위해 encodeURIComponent 사용)
+    const res = await fetch(
+      `http://localhost:3001/api/playlists/${encodeURIComponent(playlistId)}`,
+      // 로그인 정보(쿠키)를 포함해서 요청을 보냅니다.
+      { credentials: 'include' } 
+    );
+
+    // 만약 응답 코드가 성공(200번대)이 아니라면 에러를 냅니다.
+    if (!res.ok) throw new Error('playlist load fail');
+
+    // 서버가 보낸 데이터를 JSON 형식으로 변환해서 반환합니다.
+    return res.json(); 
+  }
+
+  // 사용자가 선택한 테마 색상을 서버에 저장(수정)하는 함수입니다.
+  async function updateThemeColor(id, themeColor) {
+    // PATCH 메서드를 사용해 특정 재생목록의 테마 색상만 부분 수정합니다.
+    const res = await fetch(
+      `http://localhost:3001/api/playlists/${encodeURIComponent(id)}/theme`,
+      {
+        method: 'PATCH', // 수정 요청
+        credentials: 'include', // 인증 정보 포함
+        headers: { 'Content-Type': 'application/json' }, // 보내는 데이터가 JSON임을 명시
+        body: JSON.stringify({ themeColor }), // 바꿀 색상 값을 JSON 문자열로 변환해 보냄
+      }
+    );
+
+    // 서버 응답을 JSON으로 받습니다. 혹시 실패하면 빈 객체({})를 씁니다.
+    const data = await res.json().catch(() => ({}));
+
+    // 응답이 실패했거나, 데이터에 ok 신호가 없다면 에러 처리합니다.
+    if (!res.ok || !data.ok) {
+      // 에러 메시지가 있으면 보여주고, 없으면 HTTP 상태 코드를 보여줍니다.
+      const msg = data.error || `HTTP ${res.status}`;
+      throw new Error(msg); // 에러 발생 시켜서 알림창을 띄울 수 있게 함
+    }
+
+    // 성공했다면 결과 데이터를 반환합니다.
+    return data; 
+  }
+
+
+  // ─────────────────────────────────────────
+  // 렌더링: 가져온 데이터로 화면을 그리는 함수들
+  // ─────────────────────────────────────────
+  
+  // 헤더 영역(커버, 제목, 버튼 등)을 그리는 함수입니다.
+  function renderHeader(pl) {
+    // 헤더가 들어갈 HTML 요소를 찾습니다.
+    const header = $('#headerSection');
+    // 기존에 있던 내용을 싹 지웁니다. (새로 그리기 위해)
+    header.innerHTML = '';
+
+    // 이 재생목록의 테마 색을 가져옵니다. 없으면 기본 하늘색(#22d3ee)을 씁니다.
+    let theme = pl.theme_color || '#22d3ee';
+
+    // ★ 이 색상을 기준으로 페이지 전체(배경, 버튼 등)의 색을 바꿉니다.
+    applyPlaylistTheme(theme);
+
+    // 헤더 전체를 감쌀 큰 박스(div)를 만듭니다.
+    const box = document.createElement('div');
+    box.className = 'plv-header'; // 스타일 클래스 적용
+
+    // 앨범 커버 이미지가 들어갈 박스를 만듭니다.
+    const cover = document.createElement('div');
+    cover.className = 'plv-cover'; // 2x2 격자 스타일 클래스 적용
+
+    // 썸네일 이미지 주소 최대 4개를 가져옵니다.
+    const thumbs = buildCoverThumbs(pl.items); 
+    
+    // 만약 썸네일이 하나라도 있다면
+    if (thumbs.length) {
+      // 각 썸네일 주소마다 이미지 태그를 만듭니다.
+      thumbs.forEach(src => {
+        const img = document.createElement('img');
+        img.src = src; // 이미지 경로 설정
+        img.alt = 'thumb'; // 시각장애인용 대체 텍스트
+        cover.appendChild(img); // 커버 박스 안에 이미지를 넣습니다.
+      });
+      // 이미지가 4개보다 적으면(예: 1개, 2개), 남은 칸이 비어 보이지 않게 어두운 색으로 채웁니다.
+      while (cover.childElementCount < 4) {
+        const d = document.createElement('div');
+        d.style.background = '#020617'; // 아주 어두운 남색 배경
+        cover.appendChild(d); // 빈 칸 채우기용 div 추가
+      }
+    } else {
+      // 만약 썸네일이 아예 없다면 (곡이 없는 경우 등)
+      // 중앙에 음표 아이콘(🎵)을 띄울 박스를 만듭니다.
+      const d = document.createElement('div');
+      d.style.gridColumn = '1/3'; // 2칸을 합쳐서 꽉 차게 씁니다.
+      d.style.gridRow = '1/3';    // 세로로도 2칸 합칩니다.
+      d.style.display = 'flex';   // 중앙 정렬을 위해 Flexbox 사용
+      d.style.alignItems = 'center'; // 세로 중앙
+      d.style.justifyContent = 'center'; // 가로 중앙
+      d.textContent = '🎵'; // 음표 이모지
+      cover.appendChild(d); // 커버 박스에 추가
+    }
+
+    // 제목과 설명, 버튼들을 담을 오른쪽 정보 영역을 만듭니다.
+    const meta = document.createElement('div'); 
+
+    // 제목 div를 만듭니다.
+    const title = document.createElement('div');
+    title.className = 'plv-title'; // 큰 글씨 스타일
+    title.textContent = pl.title; // 플레이리스트 제목 넣기
+
+    // 부가 설명(소유자, 트랙 수 등) div를 만듭니다.
+    const sub = document.createElement('div');
+    sub.className = 'plv-sub'; // 작은 글씨 스타일
+    // 텍스트 내용을 조합합니다: "소유자 · 트랙 N개 · ♥ 좋아요수 · 공개여부"
+    sub.textContent =
+      `${pl.owner_name || '나'} · 트랙 ${(pl.items || []).length}개 ` 
+      + `· ♥ ${pl.likes || 0} · ${pl.is_public ? '공개' : '비공개'}`; 
+
+    // 버튼들을 담을 컨트롤 영역 div를 만듭니다.
+    const controls = document.createElement('div');
+    controls.className = 'plv-controls'; 
+
+    // [▶ 전체 재생] 버튼을 만듭니다.
+    const playBtn = document.createElement('button');
+    playBtn.className = 'btn primary'; // 강조색 버튼 스타일
+    playBtn.textContent = '▶ 전체 재생';
+    // 버튼 클릭 시 동작 설정
+    playBtn.addEventListener('click', () => {
+      // 첫 번째 곡을 가져옵니다.
+      const first = (pl.items || [])[0];
+      // 곡이 없으면 경고창 띄우고 끝냅니다.
+      if (!first) {
+        alert('재생할 곡이 없습니다.');
+        return;
+      }
+      // 첫 번째 곡의 ID를 'currentTrackId'라는 이름으로 저장합니다.
+      localStorage.setItem('currentTrackId', first.track_id);
+      // 음악 플레이어 페이지로 이동합니다.
+      location.href = './player.html';
+    });
+
+    // [삭제] 버튼을 만듭니다.
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-danger'; // 빨간색 위험 버튼 스타일
+    deleteBtn.textContent = '재생목록 삭제'; 
+
+    // 삭제 버튼 클릭 시 동작 설정
+    deleteBtn.addEventListener('click', async () => {
+      // 진짜 삭제할 건지 물어봅니다. 취소하면 함수 종료.
+      if (!confirm(`"${pl.title}" 재생목록을 삭제할까요?`)) return; 
+
+      try {
+        // 서버에 삭제 요청을 보냅니다.
+        const res = await API.deletePlaylist(pl.id); 
+
+        if (res.ok) {
+          // 성공하면 알림을 띄우고 목록 페이지로 이동합니다.
+          alert('재생목록이 삭제되었습니다.'); 
+          location.href = './playlist.html'; 
+        } else {
+          // 실패하면 원인을 분석합니다.
+          if (res.error === 'login required' || res.status === 401) {
+            // 로그인이 필요한 경우
+            alert('로그인 후 이용해 주세요.');
+            location.href = './login.html?redirect=playlist'; 
+          } else if (res.error === 'forbidden' || res.status === 403) {
+            // 삭제 권한이 없는 경우 (남의 것 등)
+            alert('이 재생목록은 삭제할 권한이 없습니다.');
+          } else {
+            // 그 외 알 수 없는 오류
+            alert('삭제 실패: ' + (res.error || '알 수 없는 오류')); 
+          }
+        }
+      } catch (e) {
+        // 통신 에러 등 예외 발생 시
+        console.error('playlist delete error:', e); 
+        alert('재생목록 삭제 중 오류가 발생했습니다.'); 
+      }
+    });
+
+
+    // 🎨 테마 색을 바꾸는 UI(동그라미 색상 선택기)를 만듭니다.
+    const colorWrap = document.createElement('div');
+    colorWrap.className = 'theme-color-wrap'; // 스타일 클래스
+
+    // "테마 색"이라는 라벨 텍스트
+    const colorLabel = document.createElement('span');
+    colorLabel.className = 'sub'; 
+    colorLabel.style.opacity = '.85'; // 약간 흐리게
+    colorLabel.textContent = '테마 색'; 
+
+    // 실제 색상을 고르는 input 태그
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color'; // 컬러 피커 타입
+    colorInput.value = theme; // 현재 테마색으로 초기값 설정
+
+    // [색 저장] 버튼
+    const saveColorBtn = document.createElement('button');
+    saveColorBtn.className = 'btn'; 
+    saveColorBtn.textContent = '색 저장'; 
+
+    // 색 저장 버튼 클릭 시 동작
+    saveColorBtn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // 클릭 이벤트가 다른 곳으로 퍼지지 않게 막음
+      const newColor = colorInput.value || theme; // 선택된 색상을 가져옴
+
+      try {
+        // 서버에 변경된 색상을 저장 요청합니다.
+        await updateThemeColor(pl.id, newColor); 
+
+        // 성공하면 현재 화면의 테마도 즉시 변경해 줍니다.
+        theme = newColor;
+        applyPlaylistTheme(theme);
+
+        alert('테마 색이 저장되었습니다.'); 
+      } catch (err) {
+        // 실패 시 에러 로그 출력 및 알림
+        console.error('update theme error:', err); 
+        alert('테마 색 저장 실패: ' + err.message); 
+      }
+    });
+
+    // 색상 UI 박스 안에 라벨, 입력창, 저장버튼을 순서대로 넣습니다.
+    colorWrap.appendChild(colorLabel);
+    colorWrap.appendChild(colorInput);
+    colorWrap.appendChild(saveColorBtn);
+
+    // 컨트롤 박스 안에 재생버튼, 삭제버튼, 색상UI를 넣습니다.
+    controls.appendChild(playBtn);
+    controls.appendChild(deleteBtn);
+    controls.appendChild(colorWrap);
+
+    // 정보 영역 안에 제목, 부가정보, 컨트롤박스를 넣습니다.
+    meta.appendChild(title);
+    meta.appendChild(sub);
+    meta.appendChild(controls);
+
+    // 전체 헤더 박스 안에 커버와 정보 영역을 넣습니다.
+    box.appendChild(cover);
+    box.appendChild(meta);
+
+    // 마지막으로, 완성된 박스를 화면(headerSection)에 갖다 붙입니다.
+    header.appendChild(box);
+  }
+
+  // 트랙(노래) 리스트를 그리는 함수입니다.
+  function renderTracks(pl) {
+    // 트랙 리스트가 들어갈 HTML 요소를 찾습니다.
+    const list = $('#trackList'); 
+    // 기존 내용을 비웁니다.
+    list.innerHTML = ''; 
+
+    // 플레이리스트 안의 items(곡 목록)을 가져옵니다. 없으면 빈 배열.
+    const items = pl.items || []; 
+    
+    // 만약 곡이 하나도 없다면 안내 메시지를 보여줍니다.
+    if (!items.length) {
+      list.innerHTML =
+        '<div class="sub" style="opacity:.7;padding:8px;">'
+        + '아직 이 재생목록에 곡이 없습니다. '
+        + '위의 "곡 추가하기" 버튼을 눌러 검색 화면에서 추가해 보세요.'
+        + '</div>';
+      return; // 함수 종료
+    }
+
+    // 곡이 있다면 하나씩 반복(forEach)하면서 화면에 그립니다.
+    items.forEach((t, idx) => {
+      // 한 줄(row)을 감쌀 div를 만듭니다.
+      const row = document.createElement('div');
+      row.className = 'plv-track-row'; // 그리드 스타일 적용
+
+      // 1. 번호 표시용 div
+      const index = document.createElement('div');
+      index.className = 'sub'; 
+      index.style.textAlign = 'right'; // 오른쪽 정렬
+      index.textContent = idx + 1; // 0부터 시작하니까 1을 더해서 표시
+
+      // 2. 메인 정보(이미지+텍스트)용 div
+      const main = document.createElement('div');
+      main.className = 'plv-track-main'; 
+      
+      // 작은 앨범 이미지
+      const img = document.createElement('img');
+      img.src = t.thumb || ''; // 이미지 주소
+      img.alt = 'thumb'; 
+
+      // 제목과 가수 정보를 담을 div
+      const texts = document.createElement('div'); 
+      texts.style.minWidth = 0; // 말줄임표 처리를 위해 너비 최소화
+      // HTML 문자열로 제목과 가수 정보를 넣습니다.
+      texts.innerHTML = `
+        <div class="plv-track-title">${t.title || ''}</div>
+        <div class="plv-track-sub">${t.artist || ''} · ${t.source || ''}</div>
+      `;
+
+      // 메인 정보 div 안에 이미지와 텍스트를 넣습니다.
+      main.appendChild(img);
+      main.appendChild(texts);
+
+      // 3. 오른쪽 [재생] 버튼 영역 div
+      const right = document.createElement('div'); 
+      right.style.textAlign = 'right'; // 오른쪽 정렬
+      // 버튼 HTML을 직접 넣습니다. data-role="play"로 나중에 식별 가능하게 함.
+      right.innerHTML = `<button class="btn" data-role="play">재생</button>`;
+
+      // 한 줄(row) 안에 [번호], [메인정보], [오른쪽버튼] 순서로 넣습니다.
+      row.appendChild(index);
+      row.appendChild(main);
+      row.appendChild(right);
+
+      // 이 줄을 클릭했을 때의 동작을 설정합니다.
+      row.addEventListener('click', (e) => {
+        e.stopPropagation(); // 이벤트가 부모로 퍼지는 걸 막음
+        // 현재 곡의 ID를 로컬 저장소에 저장해둡니다. (플레이어에서 쓰려고)
+        localStorage.setItem('currentTrackId', t.track_id); 
+        // 플레이어 페이지로 이동합니다.
+        location.href = './player.html'; 
+      });
+
+      // 완성된 한 줄을 전체 리스트에 추가합니다.
+      list.appendChild(row); 
+    });
+  }
+
+  // "곡 추가하기" 버튼을 눌렀을 때의 동작
+  $('#goAddFromSearch').addEventListener('click', () => {
+    // 검색 페이지로 이동하되, 현재 플레이리스트 ID를 쿼리로 넘깁니다.
+    // (검색 페이지에서 곡을 선택하면 이 플레이리스트에 추가하기 위함)
+    location.href = `./search.html?addToPlaylist=${encodeURIComponent(playlistId)}`;
+  });
+
+  // 페이지가 로드되면 즉시 실행되는 초기화 함수입니다. (IIFE 패턴)
+  (async function init() {
+    try {
+      // 1. 서버에서 데이터 가져오기
+      const pl = await fetchPlaylist();
+      // 2. 헤더 정보 그리기
+      renderHeader(pl);
+      // 3. 트랙 목록 그리기
+      renderTracks(pl);
+    } catch (e) {
+      // 에러 발생 시 콘솔에 출력하고
+      console.error(e);
+      // 사용자에게 알린 뒤 목록 페이지로 쫓아냅니다.
+      alert('재생목록을 불러오지 못했습니다.');
+      location.href = './playlist.html';
+    }
+  })();
+</script>
+</body>
+</html>

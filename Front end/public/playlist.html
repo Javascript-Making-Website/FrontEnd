@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <!-- 문서의 문자 인코딩을 UTF-8로 설정합니다. 한글 등 다국어 문자를 올바르게 표시하기 위해 필요합니다. -->
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <!-- 반응형 표시를 위해 뷰포트 메타 태그를 설정합니다. 모바일 화면에서 페이지가 화면 폭에 맞게 렌더링됩니다. -->
+  <title>Emotion Playlist · Playlists</title>
+  <!-- 브라우저 탭에 표시될 문서 제목을 지정합니다. -->
+  <link rel="stylesheet" href="./assets/styles.css"/>
+  <!-- 외부 스타일시트(styles.css)를 불러옵니다. 이 파일은 페이지의 전반적인 스타일을 담당합니다. -->
+  <style>
+    /* 내 재생목록 가로 스크롤 */
+    .my-playlists-row {
+      display: flex;
+      /* 요소를 가로로 나열하기 위해 flexbox 컨테이너로 만듭니다. */
+      gap: 16px;
+      /* 각 항목 사이의 간격을 16픽셀로 설정합니다. */
+      overflow-x: auto;
+      /* 가로로 넘칠 경우 스크롤을 허용합니다(수평 스크롤). */
+      padding: 8px 4px 4px;
+      /* 내부 여백을 각각 위 8px, 좌우 4px, 아래 4px로 설정합니다. */
+      scrollbar-width: thin;
+      /* Firefox에서 스크롤바 너비를 얇게 보여달라는 힌트입니다. */
+    }
+    .my-playlists-row::-webkit-scrollbar {
+      height: 6px;
+      /* WebKit(크롬 등)에서 가로 스크롤바의 높이를 6px로 지정합니다. */
+    }
+
+    /* 재생목록 카드 */
+    .pl-card {
+      position: relative;
+      /* 내부의 절대 위치 요소(삭제 버튼 등)를 배치하기 위해 상대 위치를 사용합니다. */
+      min-width: 220px;
+      /* 카드의 최소 너비를 220px로 지정합니다. */
+      max-width: 220px;
+      /* 카드의 최대 너비를 220px로 고정해 카드 크기가 일관되도록 합니다. */
+      background: var(--card);
+      /* 카드 배경색은 CSS 변수 --card 값을 사용합니다(테마 대응). */
+      border-radius: 16px;
+      /* 모서리를 둥글게 만듭니다(16px 반경). */
+      padding: 12px;
+      /* 카드 내부 여백을 12px로 설정합니다. */
+      display: flex;
+      /* 카드 내부 요소들을 세로/가로 정렬에 편리한 flex로 만듭니다. */
+      flex-direction: column;
+      /* 내부 요소들을 세로(열)로 배치합니다. */
+      gap: 8px;
+      /* 내부 요소들 사이 간격을 8px로 설정합니다. */
+      cursor: pointer;
+      /* 카드 전체를 클릭 가능한 것처럼 보이게 마우스 포인터를 변경합니다. */
+      transition: transform .15s ease, box-shadow .15s ease;
+      /* 호버 시 변형 애니메이션을 부드럽게 처리합니다(이동/그림자). */
+    }
+    .pl-card:hover {
+      transform: translateY(-2px);
+      /* 마우스가 올라가면 카드가 살짝 위로 떠 보이도록 이동합니다. */
+      box-shadow: 0 10px 25px rgba(0,0,0,.55);
+      /* 호버 시 그림자를 깊게 하여 부각시킵니다. */
+    }
+
+    /* 재생목록 삭제 버튼 (호버 시 노출) */
+    .pl-delete-btn {
+      position: absolute;
+      /* 부모(.pl-card)를 기준으로 절대 위치합니다. */
+      bottom: 6px;
+      /* 카드 하단으로부터 6px 위에 위치합니다. */
+      right: 8px;
+      /* 카드 오른쪽에서 8px 떨어진 위치에 배치합니다. */
+      padding: 4px 6px;
+      /* 버튼의 내부 여백을 위/아래 4px, 좌/우 6px로 설정합니다. */
+      font-size: 13px;
+      /* 버튼 텍스트 크기를 13px로 설정합니다. */
+      border-radius: 999px;
+      /* 둥근 모서리(완전 원형에 가까운 형태)를 만듭니다. */
+      border: none;
+      /* 기본 테두리를 제거합니다. */
+      background: rgba(255, 80, 80, 0.9);
+      /* 붉은색 계열의 배경을 주어 삭제 버튼임을 시각적으로 표시합니다. */
+      color: #fff;
+      /* 버튼 텍스트 색상을 흰색으로 설정합니다. */
+      cursor: pointer;
+      /* 클릭 가능한 요소임을 나타내는 포인터로 변경합니다. */
+      opacity: 0;                 /* 기본은 숨김 */
+      /* 기본적으로 보이지 않게 합니다. */
+      transform: translateY(4px); /* 살짝 내려가 있게 */
+      /* 시각적으로 버튼이 아래에 있는 것처럼 시작 위치를 설정합니다. */
+      transition: opacity .15s ease, transform .15s ease;
+      /* 표시/숨김과 이동 전환을 부드럽게 처리합니다. */
+      z-index: 5;                 /* 재생 hover 위에 올라오게 */
+      /* 다른 요소보다 위에 표시되도록 z-index를 높입니다. */
+      pointer-events: none;       /* 기본은 클릭 안 됨 (호버 때 켜짐) */
+      /* 기본적으로 클릭 불가 상태로 두어 호버 시만 클릭되도록 만듭니다. */
+    }
+    .pl-card:hover .pl-delete-btn {
+      opacity: 1;
+      /* 카드에 마우스를 올리면 버튼이 보이도록 합니다. */
+      transform: translateY(0);
+      /* 버튼을 원위치로 이동시켜 자연스럽게 나타나게 합니다. */
+      pointer-events: auto;       /* 카드에 호버되면 클릭 가능 */
+      /* 이제 클릭 이벤트가 가능해집니다. */
+    }
+    .pl-delete-btn:hover {
+      background: rgba(255, 40, 40, 1);
+      /* 버튼에 마우스를 올리면 색을 더 진하게 해서 피드백을 줍니다. */
+    }
+
+
+    /* 커버(썸네일들 모인 사각형) */
+    .pl-cover {
+  position: relative; /* 부모 컨테이너 기준 상대 위치 지정 */
+  width: 100%; /* 가로 100% */
+  aspect-ratio: 1/1; /* 정사각형 비율 유지 */
+  border-radius: 12px; /* 둥근 모서리 */
+  overflow: hidden; /* 내부 내용이 넘치면 숨김 */
+  background: linear-gradient(135deg,#111,#222); /* 기본 그라데이션 배경 */
+  display: grid; /* 2x2 그리드로 구성 */
+  grid-template-columns: repeat(2,1fr); /* 2열 균등 분할 */
+  grid-template-rows: repeat(2,1fr); /* 2행 균등 분할 */
+  gap: 2px; /* 격자 간격 2px */
+}
+
+.pl-cover img {
+  width: 100%; /* 이미지 가로 100% */
+  height: 100%; /* 이미지 세로 100% */
+  object-fit: cover; /* 비율 유지하며 영역 채우기 */
+  display: block; /* 블록 요소로 표시 */
+}
+
+.pl-cover-fallback {
+  grid-column: 1 / 3; /* 가로 2칸 모두 차지 */
+  grid-row: 1 / 3; /* 세로 2칸 모두 차지 */
+  display:flex; /* 중앙 정렬을 위한 flex */
+  align-items:center; /* 세로 중앙 정렬 */
+  justify-content:center; /* 가로 중앙 정렬 */
+  font-size:32px; /* 글자 크기 */
+  opacity:.6; /* 반투명 */
+}
+
+
+    /* hover 재생 버튼 */
+.pl-play-hover {
+  position:absolute; /* 부모 기준 절대 위치 */
+  inset:0; /* 상하좌우 0으로 전체 덮기 */
+  display:flex; /* 중앙 정렬을 위한 flex */
+  align-items:center; /* 세로 중앙 정렬 */
+  justify-content:center; /* 가로 중앙 정렬 */
+  background:linear-gradient(135deg,rgba(0,0,0,.0),rgba(0,0,0,.45)); /* 위에서 아래로 그라데이션 오버레이 */
+  opacity:0; /* 초기에는 숨김 */
+  transition:opacity .15s ease, transform .15s ease; /* 부드러운 표시/확대 애니메이션 */
+  pointer-events:none; /* 초기에는 클릭 이벤트 무시 */
+}
+
+.pl-card:hover .pl-play-hover {
+  opacity:1; /* 카드 호버 시 표시 */
+  transform:scale(1.02); /* 살짝 확대 */
+  pointer-events:auto; /* 클릭 가능 */
+}
+
+.pl-play-btn {
+  width:56px; /* 버튼 가로 */
+  height:56px; /* 버튼 세로 */
+  border-radius:50%; /* 원형 버튼 */
+  border:none; /* 테두리 제거 */
+  display:flex; /* 아이콘 중앙 정렬 */
+  align-items:center; /* 세로 중앙 */
+  justify-content:center; /* 가로 중앙 */
+  background:var(--accent, #1ed760); /* 기본 녹색 강조색 */
+  font-size:24px; /* 아이콘 크기 */
+  cursor:pointer; /* 마우스 포인터 변경 */
+}
+
+.pl-meta-title {
+  font-weight:600; /* 제목 두껍게 */
+  font-size:16px; /* 제목 크기 */
+}
+
+.pl-meta-sub {
+  font-size:12px; /* 부제목 크기 */
+  opacity:.7; /* 반투명 */
+}
+
+
+    /* 공유 재생목록 리스트 */
+.pl-public-row {
+  display:flex; /* 행 레이아웃 */
+  gap:10px; /* 항목 간격 */
+  align-items:center; /* 세로 중앙 정렬 */
+  padding:8px 0; /* 위아래 여백 */
+  border-bottom:1px solid rgba(255,255,255,.04); /* 아래 구분선 */
+  cursor:pointer; /* 마우스 포인터 변경 */
+}
+
+.pl-public-thumb {
+  width:56px; /* 썸네일 가로 */
+  height:56px; /* 썸네일 세로 */
+  border-radius:8px; /* 모서리 둥글게 */
+  background:#111; /* 기본 배경색 */
+  overflow:hidden; /* 내용 넘침 숨김 */
+  flex-shrink:0; /* 축소 방지 */
+  display:grid; /* 2x2 그리드 */
+  grid-template-columns:repeat(2,1fr); /* 열 2칸 */
+  grid-template-rows:repeat(2,1fr); /* 행 2칸 */
+  gap:1px; /* 그리드 간격 */
+}
+
+.pl-public-thumb img {
+  width:100%; 
+  height:100%; 
+  object-fit:cover; /* 이미지 영역 채우기 */
+}
+
+.badge-pill {
+  border-radius:999px; /* 둥근 배지 */
+  padding:2px 8px; /* 안쪽 여백 */
+  font-size:11px; /* 글자 크기 */
+  background:rgba(255,255,255,.08); /* 반투명 배경 */
+}
+  </style>
+</head>
+<body data-mood="calm" data-auth-required="playlist"> <!-- 페이지 바디, 감정/권한 속성 -->
+
+<header class="topbar">
+  <div class="brand">📂 재생목록</div> <!-- 상단 브랜드 로고/텍스트 -->
+  <nav class="nav">
+    <!-- 상단 내비게이션 메뉴 -->
+    <a href="./home.html" class="btn">홈</a>
+    <!-- 홈 페이지로 이동하는 링크입니다. -->
+    <a href="./search.html" class="btn">검색</a>
+    <!-- 검색 페이지로 이동하는 링크입니다. -->
+    <a href="./playlist.html" class="btn">내 재생목록</a>
+    <!-- 현재 페이지(내 재생목록)로 연결되는 링크입니다. -->
+    <a href="./login.html" id="loginLink" class="btn">로그인</a>
+    <!-- 로그인 페이지로 이동하는 링크입니다. 로그인 상태에 따라 숨기거나 교체될 수 있습니다. -->
+    <span id="userBadge" class="badge hidden"></span> <!-- 로그인 사용자 이름 표시 -->
+    <!-- 로그인된 사용자의 이름이나 닉네임을 표시하는 배지 요소(초기엔 hidden으로 숨김) -->
+    <button id="logoutBtn" class="btn hidden">로그아웃</button> <!-- 로그인 시 활성화 -->
+    <!-- 로그아웃 버튼(초기에는 숨김). 로그인 상태면 보이고, 클릭 시 로그아웃 이벤트가 발생해야 합니다. -->
+  </nav>
+</header>
+
+<main style="padding:16px;display:flex;flex-direction:column;gap:24px"> <!-- 메인 콘텐츠 영역, 세로 레이아웃, 항목 간격 -->
+  <!-- 여기서부터 실제 페이지 콘텐츠(내 재생목록 목록, 공유 목록 등)를 구성하는 요소들이 들어갑니다. -->
+</main>
+</body>
+</html>
+
+
+  <!-- 내 재생목록 (가로 스크롤 첫 줄) -->
+  <section class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px">
+      <div class="title">내 재생목록</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="plTitle"
+              placeholder="재생목록 이름"
+              style="padding:8px 10px;border-radius:999px;min-width:180px;
+                      background:var(--card);color:var(--text);
+                      border:1px solid rgba(255,255,255,.16)"/>
+
+        <!-- 🎨 재생목록 색 선택 -->
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <span class="sub" style="opacity:.8;">테마 색</span>
+          <input id="plColor"
+                type="color"
+                value="#22d3ee"
+                style="width:32px;height:32px;border-radius:50%;border:none;padding:0;cursor:pointer;background:transparent;"/>
+        </div>
+  <button id="createPL" class="btn primary">생성</button>
+</div>
+
+    </div>
+
+    <div id="myPlaylistsRow" class="my-playlists-row">
+      <!-- JS 렌더링 -->
+    </div>
+  </section>
+
+  <!-- 공유 재생목록 (아래, 세로 스크롤) -->
+  <section class="panel" style="max-height:420px;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="title">공유 재생목록</div>
+      <div style="display:flex;gap:4px">
+        <button class="btn" id="sortRecent" data-sort="recent">최신</button>
+        <button class="btn" id="sortPopular" data-sort="popular">인기</button>
+      </div>
+    </div>
+
+    <div id="publicLists">
+      <!-- JS 렌더링 -->
+    </div>
+  </section>
+</main>
+
+<script src="./assets/api.js"></script>
+<script src="./assets/auth.js"></script>
+<script>
+  // 페이지 로드되자마자 로그인 여부 확인
+if (window.Auth) {
+  Auth.requireLogin('playlist'); // 로그인 필요 페이지일 경우 인증 체크
+}
+
+const $ = (s) => document.querySelector(s); // 간단한 선택자 함수
+
+function buildCoverThumbs(items) {
+  // 최대 4개의 썸네일 이미지 추출
+  // items 배열에서 썸네일만 뽑아 최대 4개로 제한하는 유틸 함수
+  const thumbs = (items || [])
+    .map(t => t.thumb) // thumb 속성만 추출
+    .filter(Boolean)   // null/undefined 제거
+    .slice(0, 4);     // 최대 4개
+  return thumbs;
+}
+
+function goPlaylistDetail(id) {
+  // 특정 재생목록 상세 페이지로 이동
+  // 재생목록 아이디를 쿼리스트링에 안전하게 넣어 페이지 전환
+  location.href = `./playlist_view.html?id=${encodeURIComponent(id)}`;
+}
+
+async function renderMy() {
+  const row = $('#myPlaylistsRow'); // 내 재생목록 컨테이너 선택
+  row.innerHTML = ''; // 초기화
+
+  try {
+    const res = await API.playlists(); // 서버에서 내 재생목록 가져오기
+    console.log('▶ /api/playlists 결과:', res); // 디버깅용
+    const items = res.items || [];
+
+    if (!items.length) {
+      // 재생목록이 없을 경우 안내 메시지
+      // 사용자에게 생성 유도 문구를 표시
+      row.innerHTML =
+        '<div class="sub" style="opacity:.7;padding:4px 8px;">아직 만든 재생목록이 없습니다. 오른쪽에서 새로 만들어 보세요.</div>';
+      return;
+    }
+
+      items.forEach(pl => {
+        const card = document.createElement('div');
+        card.className = 'pl-card'; // 재생목록 카드 컨테이너
+        card.dataset.id = pl.id; // 혹시 나중에 쓸 수 있으니 넣어둠
+
+        // 🔥 이 재생목록의 색 (없으면 기본)
+        const theme = pl.theme_color || '#22d3ee'; // 테마 색상, 없으면 기본 색 사용
+        // 카드 배경에 그라데이션을 적용해 시각적 구분을 줌
+        card.style.background = `linear-gradient(135deg, ${theme}25, #020617)`; // 카드 배경 그라데이션
+        // 테두리 색도 테마 색의 반투명으로 설정
+        card.style.border = `1px solid ${theme}55`; // 카드 테두리 색상
+
+        const thumbs = buildCoverThumbs(pl.items); // 최대 4개의 썸네일 가져오기
+        const cover = document.createElement('div');
+        cover.className = 'pl-cover'; // 썸네일 컨테이너
+
+        if (thumbs.length) {
+          // 썸네일이 있을 경우
+          // 각 썸네일 이미지를 img 요소로 만들어 커버에 추가
+          thumbs.forEach(src => {
+            const img = document.createElement('img');
+            img.src = src; // 이미지 경로
+            img.alt = 'thumb'; // 대체 텍스트
+            cover.appendChild(img);
+          });
+          // 썸네일이 4개 미만이면 남은 칸을 배경 div로 채움
+          // 이렇게 하면 레이아웃이 일정하게 유지됨
+          while (cover.childElementCount < 4) {
+            const div = document.createElement('div');
+            div.style.background = '#111';
+            cover.appendChild(div);
+          }
+        } else {
+          // 썸네일 없을 경우 fallback 표시
+          // 기본 아이콘을 보여줘 빈 상태를 표시
+          const fallback = document.createElement('div');
+          fallback.className = 'pl-cover-fallback';
+          fallback.textContent = '🎵'; // 음악 아이콘
+          cover.appendChild(fallback);
+        }
+
+        const hover = document.createElement('div');
+        // 썸네일 위에 표시되는 재생 오버레이 영역
+        hover.className = 'pl-play-hover'; // 호버 시 재생 버튼 오버레이
+        const playBtn = document.createElement('button');
+        // 재생 버튼 요소 생성 (오버레이 안에 들어감)
+        playBtn.className = 'pl-play-btn'; // 재생 버튼 스타일
+        playBtn.innerHTML = '▶'; // 재생 아이콘
+
+        // 버튼 배경도 재생목록 색으로
+        // 재생목록의 시각적 일관성을 유지하기 위함
+        playBtn.style.background = theme;
+        hover.appendChild(playBtn);
+        // 오버레이를 썸네일 컨테이너에 추가하여 마우스 호버 시 표시
+        cover.appendChild(hover);
+
+
+        // 🔥 여기: 삭제 버튼 추가
+        deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // 클릭 이벤트 버블링 방지
+        if (!confirm(`"${pl.title}" 재생목록을 삭제할까요?`)) return; // 삭제 확인
+
+      try {
+        const res = await API.deletePlaylist(pl.id); // API 호출: 재생목록 삭제
+        if (res.ok) {
+          card.remove(); // 삭제 성공 시 카드 제거
+          if (!row.children.length) {
+            // 카드가 없으면 안내 메시지 표시
+            row.innerHTML =
+              '<div class="sub" style="opacity:.7;padding:4px 8px;">아직 만든 재생목록이 없습니다. 오른쪽에서 새로 만들어 보세요.</div>';
+          }
+        } else {
+          alert('삭제 실패: ' + (res.error || '알 수 없는 오류')); // 실패 알림
+        }
+      } catch (err) {
+        console.warn('▶ /api/playlists/:id DELETE 실패:', err); // 콘솔 로그
+        alert('재생목록 삭제 중 오류가 발생했습니다.'); // 예외 처리
+      }
+    });
+
+        row.appendChild(card); // 카드 row에 추가
+      });
+    } catch (e) {
+  console.warn('▶ /api/playlists 실패:', e); // 내 재생목록 가져오기 실패 로그
+
+  if (e && (e.status === 401 || e.error === 'login required')) {
+    alert('로그인 후 이용해 주세요.');
+    location.href = './login.html?redirect=playlist'; // 로그인 페이지로 이동
+    return;
+  }
+
+  row.innerHTML =
+    '<div class="sub" style="color:#f66;">내 재생목록을 불러올 수 없습니다.</div>'; // 오류 메시지
+}
+}
+
+// 공개 재생목록 렌더링 함수
+async function renderPublic(sort = 'recent') {
+  const wrap = $('#publicLists'); // 공개 재생목록 컨테이너
+  wrap.innerHTML = ''; // 초기화
+
+  try {
+    const res = await API.publicPlaylists({ sort, limit: 50 }); // 공개 재생목록 API 호출
+    console.log('▶ /api/playlists/public 결과:', res); // 디버깅
+    const items = res.items || [];
+
+    if (!items.length) {
+      wrap.innerHTML =
+        '<div class="sub" style="opacity:.7;">공개 재생목록이 없습니다.</div>'; // 안내 메시지
+      return;
+    }
+
+    items.forEach(pl => {
+      const row = document.createElement('div');
+      row.className = 'pl-public-row'; // 공개 재생목록 행
+
+      const thumbBox = document.createElement('div');
+      thumbBox.className = 'pl-public-thumb'; // 썸네일 박스
+
+      const thumbs = buildCoverThumbs(pl.items); // 썸네일 최대 4개
+      if (thumbs.length) {
+        thumbs.forEach(src => {
+          const img = document.createElement('img');
+          img.src = src;
+          img.alt = 'thumb';
+          thumbBox.appendChild(img); // 썸네일 이미지를 thumbBox에 추가
+        });
+        while (thumbBox.childElementCount < 4) {
+          const d = document.createElement('div');
+          d.style.background = '#111'; // 빈 칸 채우기
+          thumbBox.appendChild(d);
+        }
+      } else {
+        // 썸네일 없을 경우 fallback
+        const d = document.createElement('div');
+        d.style.gridColumn = '1/3';
+        d.style.gridRow = '1/3';
+        d.style.display = 'flex';
+        d.style.alignItems = 'center';
+        d.style.justifyContent = 'center';
+        d.textContent = '🎵'; // 기본 음악 아이콘
+        thumbBox.appendChild(d);
+      }
+
+      const meta = document.createElement('div'); // 메타 정보
+      meta.style.flex = '1';
+      meta.innerHTML = `
+        <div class="title" style="font-size:15px;">${pl.title}</div>
+        <div class="sub" style="font-size:12px;">
+          ${pl.owner_name || '익명'} · 트랙 ${(pl.items || []).length}개
+        </div>
+      `; // 제목과 소유자 정보, 트랙 수 표시
+
+      const right = document.createElement('div'); // 좋아요 및 공개 여부
+      right.style.display = 'flex';
+      right.style.flexDirection = 'column';
+      right.style.alignItems = 'flex-end';
+      right.innerHTML = `
+        <span class="badge-pill">♥ ${pl.likes || 0}</span> <!-- 좋아요 개수 표시 -->
+        <span class="sub" style="font-size:11px;margin-top:4px;">${pl.is_public ? '공개' : '비공개'}</span> <!-- 공개 여부 -->
+      `;
+
+      row.appendChild(thumbBox); // 썸네일 추가
+      row.appendChild(meta); // 메타 정보 추가
+      row.appendChild(right); // 오른쪽 정보 추가
+
+      row.addEventListener('click', () => {
+        goPlaylistDetail(pl.id); // 클릭 시 상세 페이지 이동
+      });
+
+      wrap.appendChild(row); // 공개 재생목록 추가
+    });
+  } catch (e) {
+    console.warn('▶ /api/playlists/public 실패:', e); // 오류 로그
+    wrap.innerHTML =
+      '<div class="sub" style="color:#f66;">공개 재생목록을 불러올 수 없습니다.</div>'; // 오류 메시지
+  }
+}
+
+// 재생목록 생성
+$('#createPL').addEventListener('click', async () => {
+  const input = $('#plTitle'); // 제목 입력
+  const colorInput = $('#plColor'); // 색상 입력
+  const title = input.value.trim();
+  if (!title) {
+    alert('재생목록 이름을 입력하세요.');
+    input.focus(); // 입력란에 포커스
+    return;
+  }
+
+  const themeColor = (colorInput && colorInput.value) ? colorInput.value : '#22d3ee'; // 기본 테마 색
+
+  try {
+    const res = await API.createPlaylist({ title, isPublic: false, themeColor }); // API 호출: 재생목록 생성
+    console.log('▶ /api/playlists POST 결과:', res);
+    input.value = ''; // 입력 초기화
+    await renderMy(); // 내 재생목록 다시 렌더
+  } catch (e) {
+    console.warn('▶ /api/playlists POST 실패:', e);
+    if (e && (e.status === 401 || e.error === 'login required')) {
+      alert('로그인 후 이용해 주세요.');
+      location.href = './login.html?redirect=playlist'; // 로그인 페이지로 이동
+    } else {
+      alert('재생목록 생성 실패: ' + (e?.error ?? '알 수 없는 오류')); // 기타 오류 알림
+    }
+  }
+});
+
+// 공개 재생목록 정렬 버튼 이벤트
+$('#sortRecent').addEventListener('click', () => renderPublic('recent')); // 최신순 버튼
+$('#sortPopular').addEventListener('click', () => renderPublic('popular')); // 인기순 버튼
+
+// 초기 렌더링
+renderMy(); // 내 재생목록 렌더링
+renderPublic('recent'); // 공개 재생목록 최신순 렌더링
