@@ -148,15 +148,45 @@
       .replace(/\s{2,}/g, ' ')
       .trim();
 
-    // YouTube ID 추출: "youtube:ID" 또는 URL에서 v= 추출
+    // YouTube ID를 끝까지 뽑아내는 총력 파서
     function getYouTubeId(track) {
       if (!track) return '';
-      if (typeof track.id === 'string' && track.id.startsWith('youtube:')) {
-        return track.id.split(':')[1];
+
+      // 후보 문자열들을 한데 모아놓고 하나씩 검사
+      const candidates = [
+        track.id,
+        track.track_id,
+        track.videoId,
+        track.video_id,
+        track.url,
+        track.source,
+        track.original_title,
+        track.originalTitle,
+        track.thumb   // ★ 썸네일에서도 /vi/ID/ 뽑아냄
+      ].filter(Boolean);
+
+      for (const v of candidates) {
+        if (typeof v !== 'string') continue;
+
+        // 1) "youtube:XXXXXXXXXXX"
+        if (v.startsWith('youtube:')) {
+          const x = v.split(':')[1];
+          if (x && /^[\w-]{6,}$/.test(x)) return x;
+        }
+
+        // 2) 썸네일 경로: https://i.ytimg.com/vi/<ID>/...
+        const mThumb = /\/vi\/([\w-]{6,})\//i.exec(v);
+        if (mThumb) return mThumb[1];
+
+        // 3) URL: ...?v=<ID> 또는 .../be/<ID>
+        const mUrl = /(?:v=|be\/)([\w-]{6,})/i.exec(v);
+        if (mUrl) return mUrl[1];
+
+        // 4) 11자 내외의 “그럴듯한” 순수 ID
+        if (/^[\w-]{10,}$/.test(v)) return v;
       }
-      const url = track.url || track.source || track.original_title || '';
-      const m = /(?:v=|be\/)([\w-]{6,})/i.exec(url);
-      return m ? m[1] : '';
+
+      return '';
     }
 
     // ★★★ 5초 이하 스킵시 /api/skip 호출
@@ -397,18 +427,27 @@
     function setNow(t) {
       if (!t) return;
 
-      // ★★★ 이전 곡이 있고, 다른 곡으로 바꾸는 경우만 스킵 체크
-      if (currentTrack && currentTrack.id && currentTrack.id !== t.id) {
-        // fire-and-forget (await 안 해도 됨)
-        sendSkipIfNeeded();
+      // 이전 곡과 다른 곡으로 바뀔 때만 스킵 기록
+      const prevId = (currentTrack && (currentTrack.id || currentTrack.track_id)) || null;
+      const nextId = t.id || t.track_id || null;
+      if (prevId && nextId && prevId !== nextId) {
+        sendSkipIfNeeded();  // fire-and-forget
       }
 
       currentTrack = t;
-      currentTrackId = t.id || null;
-      playStartMs = Date.now();  // 새 곡 재생 시작 시각 기록
+      currentTrackId = nextId;        // ★ 통일된 현재 곡 id
+      playStartMs = Date.now();
 
       const vid = getYouTubeId(t);
-      if (ytPlayer && ytPlayer.loadVideoById && vid) ytPlayer.loadVideoById(vid);
+      // ★ 방어: vid 없으면 loadVideoById 호출하지 말고 안내 + 콘솔 로깅
+      if (ytPlayer && ytPlayer.loadVideoById) {
+        if (vid) {
+          ytPlayer.loadVideoById(String(vid));
+        } else {
+          console.warn('[player] 유튜브 ID를 찾지 못함. track=', t);
+          alert('이 트랙의 YouTube ID를 찾지 못했어요. 다음 곡을 선택해 보세요.');
+        }
+      }
 
       $('#nowThumb').src = t.thumb || '';
       $('#nowTitle').textContent = cleanTitle(t.title || '');
@@ -418,9 +457,10 @@
 
       renderRateChips();
 
-      // 시청기록 (비로그인은 조용히 무시)
-      gate(async () => { await API.watch(t.id); }, { silent: true });
+      // 시청기록(로그인 필요, 실패는 조용히)
+      gate(async () => { if (currentTrackId) await API.watch(currentTrackId); }, { silent: true });
     }
+
 
     // 이 곡에 대한 감정 평가 버튼들
     function renderRateChips() {
@@ -431,7 +471,7 @@
         b.className = 'chip rate-chip';
         b.textContent = m.label;
         b.onclick = () => gate(async () => {
-          await API.rate(currentTrack.id, m.key);
+          await API.rate(currentTrackId || currentTrack.id || currentTrack.track_id, m.key);
           currentParams.mood = m.key;                  // 현재 mood 변경
           document.body.setAttribute('data-mood', m.key);
           // 추천 모드일 때만 추천 갱신
@@ -454,7 +494,7 @@
         b.className = 'chip rate-chip';
         b.textContent = m.label;
         b.onclick = () => gate(async () => {
-          await API.rate(currentTrack.id, m.key);
+          await API.rate(currentTrackId || currentTrack.id || currentTrack.track_id, m.key);
           currentParams.mood = m.key;
           document.body.setAttribute('data-mood', m.key);
           wrap.classList.add('hidden');
